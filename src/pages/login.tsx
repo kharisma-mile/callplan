@@ -5,12 +5,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp, branchOf } from "@/store/app-store";
-import { ROLE_META, ROLE_ORDER } from "@/lib/rbac";
+import { ROLE_ORDER } from "@/lib/rbac";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function LoginPage() {
-  const { users, login, toast } = useApp();
+  const { users, login, toast, roleMeta } = useApp();
   const demo = ROLE_ORDER.map((r) => users.find((u) => u.role === r && /^U\d$/.test(u.id))!).filter(Boolean);
   const [sel, setSel] = useState(demo[3]?.id ?? demo[0].id);
   const selected = users.find((u) => u.id === sel)!;
@@ -46,11 +46,11 @@ export function LoginPage() {
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-[#01496A]">{initials(u.name)}</span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-foreground">{ROLE_META[u.role].label}</span>
+                    <span className="block text-sm font-semibold text-foreground">{roleMeta(u.role).label}</span>
                     <span className="block text-xs text-muted-foreground">
                       {u.name} · {u.branchId ? branchOf(u.branchId).name : "Kantor Pusat"}
                     </span>
-                    <span className="mt-1 block text-xs text-[#4F4F4F]">{ROLE_META[u.role].desc}</span>
+                    <span className="mt-1 block text-xs text-[#4F4F4F]">{roleMeta(u.role).desc}</span>
                   </span>
                 </button>
               ))}
@@ -79,13 +79,13 @@ export function LoginPage() {
               </div>
             </div>
             <div className="rounded-md bg-muted p-3 text-xs text-[#4F4F4F]">
-              Role: <b>{ROLE_META[selected.role].label}</b> · Cakupan data: <b>{ROLE_META[selected.role].scopeLabel}</b>
+              Role: <b>{roleMeta(selected.role).label}</b> · Cakupan data: <b>{roleMeta(selected.role).scopeLabel}</b>
             </div>
             <Button
               className="w-full"
               onClick={() => {
                 login(selected.id);
-                toast({ tone: "success", title: `Selamat datang, ${selected.name.split(" ")[0]}`, desc: ROLE_META[selected.role].label });
+                toast({ tone: "success", title: `Selamat datang, ${selected.name.split(" ")[0]}`, desc: roleMeta(selected.role).label });
               }}
             >
               Masuk

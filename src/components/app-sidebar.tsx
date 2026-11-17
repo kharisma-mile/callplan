@@ -1,5 +1,8 @@
 import {
   BadgePercent,
+  BarChart3,
+  Boxes,
+  MapPinned,
   CalendarRange,
   ClipboardCheck,
   CreditCard,
@@ -29,6 +32,19 @@ export interface NavItem {
   approval?: ApprovalType;
 }
 
+export const REPORT_PERMS = [
+  "visit_report",
+  "call_compliance_report",
+  "order_report",
+  "approval_log",
+  "noo_report",
+  "pipeline_report",
+  "survey_report",
+  "target_achievement_report",
+  "outlet_report",
+  "adoption",
+].map((r) => `view_any_${r}`);
+
 export function useNav(): NavItem[] {
   const { settings } = useApp();
   const items: NavItem[] = [
@@ -43,9 +59,13 @@ export function useNav(): NavItem[] {
     { key: "approval/credit_override", label: "Limit Kredit", icon: CreditCard, perm: "view_any_credit_override", group: "Approval", approval: "credit_override" },
     { key: "approval/noo", label: "Pelanggan Baru (NOO)", icon: UserPlus, perm: "view_any_noo", group: "Approval", approval: "noo" },
   ];
-  if (settings.pipelineStageApproval)
+  // AS-15: Batal needs SPV approval by default; per-stage approval is an optional setting
+  if (settings.pipelineStageApproval || settings.pipelineBatalApproval)
     items.push({ key: "approval/pipeline_stage", label: "Tahap Pipeline", icon: Workflow, perm: "view_any_pipeline_stage", group: "Approval", approval: "pipeline_stage" });
   items.push(
+    { key: "reports", label: "Laporan", icon: BarChart3, perm: REPORT_PERMS, group: "Laporan" },
+    { key: "products", label: "Produk & Price List", icon: Boxes, perm: ["view_any_product", "view_any_price_list"], group: "Master Data" },
+    { key: "territory", label: "Territory & Tim Sales", icon: MapPinned, perm: ["view_any_branch", "view_any_region", "view_any_route", "view_any_sales_team"], group: "Master Data" },
     {
       key: "data",
       label: settings.variant === "A" ? "Sinkronisasi Odoo" : "Import / Export Excel",
@@ -116,7 +136,7 @@ export function AppSidebar({ active, onNavigate }: { active: string; onNavigate:
 
       <div className="border-t border-sidebar-border px-4 py-3">
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Varian {settings.variant} · {settings.variant === "A" ? "Integrasi Odoo" : "Standalone"}
+          Varian {settings.variant} · {settings.variant === "A" ? "Integrasi Odoo" : "Standalone"} (mode demo)
           <br />
           Mockup demo · data dummy
         </p>

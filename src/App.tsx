@@ -14,6 +14,9 @@ import { TargetsPage } from "@/pages/targets";
 import { DataPage } from "@/pages/data";
 import { UsersPage } from "@/pages/users";
 import { SettingsPage } from "@/pages/settings";
+import { ProductsPage } from "@/pages/products";
+import { TerritoryPage } from "@/pages/territory";
+import { ReportsPage } from "@/pages/reports";
 import { NoAccess } from "@/components/empty-state";
 import type { ApprovalType } from "@/data/types";
 
@@ -59,6 +62,9 @@ function Shell() {
         data: <DataPage />,
         users: <UsersPage />,
         settings: <SettingsPage />,
+        products: <ProductsPage />,
+        territory: <TerritoryPage />,
+        reports: <ReportsPage />,
       }[route] ?? <DashboardPage onNavigate={navigate} />;
 
   return (

@@ -11,7 +11,11 @@ import type {
   Outlet,
   OutletClass,
   PjpEntry,
+  PjpChangeRequest,
+  PriceList,
   Product,
+  Region,
+  Route,
   Salesman,
   Settings,
   Spv,
@@ -165,7 +169,16 @@ for (const s of SALESMEN) {
       top: status === "baru" ? 0 : pick([14, 30, 30, 45]),
       lastOrder: status === "lama_beli" ? addDays(TODAY, -between(2, 40)) : undefined,
       odooRef: status === "baru" ? undefined : `res.partner/${10400 + outletSeq}`,
+      active: true,
+      gps: status === "baru" && rnd() < 0.3 ? undefined : { lat: Number((-6.2 - rnd() * 2).toFixed(5)), lng: Number((106.8 + rnd() * 6).toFixed(5)) },
+      npwp: rnd() < 0.45 ? `0${between(1, 9)}.${between(100, 999)}.${between(100, 999)}.${between(1, 9)}-${between(100, 999)}.000` : undefined,
+      pkp: false,
+      priceGroup: cls === "A" ? "Grosir" : pick(["Retail", "Retail", "Grosir", "Horeka / Industri"]),
+      routeId: `R-${s.branchId}-${(i % 3) + 1}`,
+      source: status === "baru" ? "noo" : "odoo",
     });
+    const last = OUTLETS[OUTLETS.length - 1];
+    last.pkp = !!last.npwp && rnd() < 0.6;
     outletSeq++;
   }
 }
@@ -185,7 +198,7 @@ for (const s of SALESMEN) {
   const outlets = OUTLETS.filter((o) => o.salesId === s.id && o.status !== "baru");
   outlets.forEach((o, i) => {
     const freq = o.cls === "A" ? "F4" : o.cls === "B" || o.status === "lama_belum" ? "F2" : "F1";
-    PJP.push({ id: `PJP${pjpSeq++}`, salesId: s.id, outletId: o.id, day: i % 6, freq, weeks: weeksFor(freq, i) });
+    PJP.push({ id: `PJP${pjpSeq++}`, salesId: s.id, outletId: o.id, day: i % 6, freq, weeks: weeksFor(freq, i), seq: Math.floor(i / 6) + 1, validFrom: CYCLE_START });
   });
 }
 export function nextPjpId() {
@@ -245,11 +258,18 @@ export function nextOppId() {
 /* ---------- orders ---------- */
 export const ORDERS: Order[] = [];
 let orderSeq = 241;
+const orderNoSeq: Record<string, number> = {};
+/** Module 07 FR-001: order number per branch `SO-<branch>-<yyyymm>-<seq>`. */
+export function orderNo(branchId: string) {
+  orderNoSeq[branchId] = (orderNoSeq[branchId] ?? (branchId === "SBY" ? 240 : 120)) + 1;
+  return `SO-${branchId}-202611-${String(orderNoSeq[branchId]).padStart(4, "0")}`;
+}
 function seedOrder(outlet: Outlet, items: [string, string, number, number?][], discountPct = 0, note?: string) {
   const s = SALESMEN.find((x) => x.id === outlet.salesId)!;
   ORDERS.push({
     id: `ORD${orderSeq}`,
-    no: `MF-ORD-2611-${String(orderSeq).padStart(4, "0")}`,
+    no: orderNo(s.branchId),
+    mfRef: `MF-ORD-2611-${String(orderSeq).padStart(4, "0")}`,
     outletId: outlet.id,
     salesId: outlet.salesId,
     date: `${addDays(TODAY, -between(0, 1))} ${String(between(8, 16)).padStart(2, "0")}:${String(between(0, 59)).padStart(2, "0")}`,
@@ -293,10 +313,10 @@ const otherOutlets = OUTLETS.filter((o) => o.branchId !== "SBY" && o.status === 
 seedOrder(otherOutlets[0], [["P01", "karton", 8], ["P02", "karton", 5]]);
 seedOrder(otherOutlets[12], [["P06", "karton", 2], ["P12", "pcs", 6]], 3);
 seedOrder(otherOutlets[30], [["P05", "karton", 20]]);
-// some already processed
-ORDERS[6].status = "Dikonfirmasi";
+// some already processed (Variant A: SO draft already in Odoo)
+ORDERS[6].status = "SO Draft di Odoo";
 ORDERS[6].soNumber = "SO/UP/2611/00871";
-ORDERS[9].status = "Dikonfirmasi";
+ORDERS[9].status = "Dikonfirmasi di Odoo";
 ORDERS[9].soNumber = "SO/UP/2611/00866";
 
 export function nextOrderSeq() {
@@ -318,8 +338,22 @@ export function outletTotal(o: Order) {
 export const DEFAULT_SETTINGS: Settings = {
   variant: "A",
   pipelineStageApproval: false,
-  existingCustomerPipeline: true,
+  pipelineBatalApproval: true,
+  existingCustomerPipeline: false,
   overdueDays: 30,
+  approvalTrigger: "auto",
+  discountTierMode: "single",
+  discountBasis: "order",
+  creditApprover: "finance_or_bm",
+  slaHours: 24,
+  salesAdminReview: true,
+  orderWithoutVisitHQ: true,
+  nooOrderBeforeFinance: false,
+  minOrder: false,
+  geofenceM: 100,
+  classFreq: { A: "F4", B: "F2", C: "F1" },
+  belumBeliFreq: "F2",
+  spvEditPjpDirect: true,
   loa: [
     { role: "sales_admin", label: "Sales (tanpa approval)", max: 2 },
     { role: "spv", label: "Sales SPV", max: 5 },
@@ -339,7 +373,21 @@ export const TARGETS_BRANCH: TargetRow[] = BRANCHES.map((b) => {
 });
 export const TARGETS_PRODUCT: TargetRow[] = PRODUCTS.map((p) => {
   const target = between(15, 120) * 10_000_000;
-  return { key: p.id, month: CURRENT_MONTH, target, actual: Math.round(target * (0.3 + rnd() * 0.5)) };
+  const actual = Math.round(target * (0.3 + rnd() * 0.5));
+  const unit = p.uoms[0].price;
+  return { key: p.id, month: CURRENT_MONTH, target, actual, targetQty: Math.round(target / unit), actualQty: Math.round(actual / unit) };
+});
+export const CATEGORIES = Array.from(new Set(PRODUCTS.map((p) => p.category)));
+export const TARGETS_CATEGORY: TargetRow[] = CATEGORIES.map((c) => {
+  const rows = TARGETS_PRODUCT.filter((t) => PRODUCTS.find((p) => p.id === t.key)!.category === c);
+  return {
+    key: c,
+    month: CURRENT_MONTH,
+    target: rows.reduce((a, r) => a + r.target, 0),
+    actual: rows.reduce((a, r) => a + r.actual, 0),
+    targetQty: rows.reduce((a, r) => a + (r.targetQty ?? 0), 0),
+    actualQty: rows.reduce((a, r) => a + (r.actualQty ?? 0), 0),
+  };
 });
 
 export interface VisitStat {
@@ -390,7 +438,7 @@ export const SYNC_DOMAINS: SyncDomain[] = [
   { key: "product", name: "Produk", direction: "Odoo → Modul", schedule: "Tiap 1 jam", lastSync: "2026-11-17 10:00", records: PRODUCTS.length, status: "ok", errors: 0 },
   { key: "uom", name: "UoM & konversi", direction: "Odoo → Modul", schedule: "Harian 05:00", lastSync: "2026-11-17 05:00", records: 31, status: "ok", errors: 0 },
   { key: "pricelist", name: "Price list", direction: "Odoo → Modul", schedule: "Tiap 1 jam", lastSync: "2026-11-17 10:00", records: 248, status: "error", errors: 2 },
-  { key: "receivable", name: "Piutang & limit kredit", direction: "Odoo → Modul", schedule: "Tiap 30 menit", lastSync: "2026-11-17 10:30", records: 214, status: "ok", errors: 0 },
+  { key: "receivable", name: "Piutang & limit kredit", direction: "Odoo → Modul", schedule: "Tiap 1 jam (+ cek saat kirim SO)", lastSync: "2026-11-17 10:30", records: 214, status: "ok", errors: 0 },
   { key: "so", name: "Pesanan → Sales Order", direction: "Modul → Odoo", schedule: "Real-time (saat konfirmasi)", lastSync: "2026-11-17 10:52", records: 86, status: "error", errors: 1 },
   { key: "so_status", name: "Status SO / invoice", direction: "Odoo → Modul", schedule: "Tiap 15 menit", lastSync: "2026-11-17 10:45", records: 86, status: "ok", errors: 0 },
   { key: "noo", name: "Pelanggan baru (NOO) → res.partner", direction: "Modul → Odoo", schedule: "Real-time (setelah approval)", lastSync: "2026-11-16 16:20", records: 9, status: "ok", errors: 0 },
@@ -398,7 +446,7 @@ export const SYNC_DOMAINS: SyncDomain[] = [
 export const SYNC_ERRORS: SyncError[] = [
   { id: "E1", domain: "pricelist", ref: "UP-GPP-16 / karton", message: "UoM 'karton' tidak ditemukan pada product.template (mapping UoM belum lengkap)", at: "2026-11-17 10:00", resolved: false },
   { id: "E2", domain: "pricelist", ref: "UP-STR-PE / pcs", message: "Harga 0 pada price list Grosir 2026 — dilewati", at: "2026-11-17 10:00", resolved: false },
-  { id: "E3", domain: "so", ref: "MF-ORD-2611-0233", message: "Timeout 30 detik saat memanggil Odoo API (sale.order create)", at: "2026-11-17 10:52", resolved: false },
+  { id: "E3", domain: "so", ref: "SO-JKT-202611-0118", message: "Timeout 30 detik saat memanggil Odoo API (sale.order create)", at: "2026-11-17 10:52", resolved: false },
 ];
 export const IMPORT_TEMPLATES = [
   { key: "customer", name: "Pelanggan", desc: "Kode, nama, alamat, cabang, sales, kelas, status beli" },
@@ -420,3 +468,46 @@ export const CUSTOMER_STATUS_LABEL: Record<CustomerStatus, string> = {
   lama_beli: "Pelanggan Lama – sudah beli",
   lama_belum: "Pelanggan Lama – belum beli",
 };
+
+/* ---------- territory (module 03) ---------- */
+export const REGIONS: Region[] = [
+  { id: "RG-W", name: "Region Barat", branchIds: ["JKT", "TGR", "BDG", "MDN", "PLG", "HQ"], active: true },
+  { id: "RG-E", name: "Region Timur", branchIds: ["SMG", "SBY", "MKS", "DPS"], active: true },
+];
+BRANCHES.forEach((b) => {
+  b.regionId = REGIONS.find((r) => r.branchIds.includes(b.id))?.id;
+  b.active = true;
+});
+const AREAS = ["Pusat Kota", "Pasar & Pergudangan", "Kawasan Industri"];
+export const ROUTES: Route[] = BRANCHES.flatMap((b) =>
+  [1, 2, 3].map((i) => ({
+    id: `R-${b.id}-${i}`,
+    code: `${b.id}-R${i}`,
+    name: `${b.city} ${AREAS[i - 1]}`,
+    branchId: b.id,
+    salesId: SALESMEN.filter((s) => s.branchId === b.id)[i - 1]?.id,
+    area: AREAS[i - 1],
+    active: true,
+  }))
+);
+
+/* ---------- price lists (module 02) ---------- */
+export const PRICE_GROUPS = ["Retail", "Grosir", "Horeka / Industri"];
+export const PRICE_LISTS: PriceList[] = [
+  { id: "PL1", name: "Retail 2026", channel: "Retail", regionId: "all", validFrom: "2026-01-01", active: true, items: PRODUCTS.flatMap((p) => p.uoms.map((u) => ({ productId: p.id, uom: u.uom, price: u.price }))) },
+  { id: "PL2", name: "Grosir 2026", channel: "Grosir", regionId: "all", validFrom: "2026-01-01", active: true, items: PRODUCTS.flatMap((p) => p.uoms.map((u) => ({ productId: p.id, uom: u.uom, price: Math.round((u.price * 0.96) / 100) * 100 }))) },
+  { id: "PL3", name: "Horeka / Industri – Timur", channel: "Horeka / Industri", regionId: "RG-E", validFrom: "2026-07-01", active: true, items: PRODUCTS.slice(0, 9).flatMap((p) => p.uoms.map((u) => ({ productId: p.id, uom: u.uom, price: Math.round((u.price * 0.98) / 100) * 100 }))) },
+  { id: "PL4", name: "Promo Akhir Tahun – Barat", channel: "Retail", regionId: "RG-W", validFrom: "2026-11-01", validTo: "2026-12-31", active: false, items: PRODUCTS.slice(0, 4).map((p) => ({ productId: p.id, uom: p.uoms[0].uom, price: Math.round((p.uoms[0].price * 0.93) / 100) * 100 })) },
+];
+
+/* ---------- PJP change requests (module 04) ---------- */
+export const PJP_REQUESTS: PjpChangeRequest[] = (() => {
+  const team = SALESMEN.filter((s) => s.spvId === "SPV-SBY-1");
+  const o0 = OUTLETS.filter((o) => o.salesId === team[0].id);
+  const o1 = OUTLETS.filter((o) => o.salesId === team[1].id);
+  return [
+    { id: "PCR1", salesId: team[0].id, outletId: o0[o0.length - 1].id, kind: "Tambah", detail: "Rabu · F2 (M1, M3)", reason: "Outlet mulai order rutin", requestedBy: team[0].name, at: "2026-11-17 07:40", status: "pending" },
+    { id: "PCR2", salesId: team[1].id, outletId: o1[2].id, kind: "Ubah hari", detail: "Senin → Kamis", reason: "Pemilik hanya ada di toko hari Kamis", requestedBy: team[1].name, at: "2026-11-16 16:05", status: "pending" },
+    { id: "PCR3", salesId: team[0].id, outletId: o0[1].id, kind: "Hapus", detail: "Keluar dari PJP mulai minggu depan", reason: "Toko tutup permanen", requestedBy: team[0].name, at: "2026-11-14 10:20", status: "approved", decidedBy: "Dewi Lestari", decisionReason: "Sudah dicek" },
+  ];
+})();

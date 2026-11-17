@@ -4,9 +4,10 @@ Interactive **frontend-only** mockup for the Unggul Plastik pre-sales demo. It s
 
 - No backend. All data is dummy and lives in memory; a page reload resets the demo.
 - UI language: Bahasa Indonesia.
-- Both solution variants are in one app. Switch them in **Pengaturan**:
-  - **Varian A (Integrasi Odoo):** the Data page becomes *Sinkronisasi Odoo*. Confirmed orders are sent to Odoo as a draft Sales Order (simulated).
-  - **Varian B (Standalone):** the Data page becomes *Import / Export Excel*. Order status is managed inside the module.
+- Both solution variants are in one app. Switch them in **Pengaturan** (labelled *Mode demo — di produksi varian ditetapkan saat deployment*):
+  - **Varian A (Integrasi Odoo):** the Data page becomes *Sinkronisasi Odoo*. Odoo-owned outlet fields are read-only (badge "Odoo"). Confirmed orders are sent to Odoo as a draft Sales Order (simulated), then read back (*Dikonfirmasi di Odoo*).
+  - **Varian B (Standalone):** the Data page becomes *Import / Export Excel*. Order status is managed in the module: *Dikonfirmasi → Diproses → Selesai*, or *Dibatalkan* (delivery is out of scope).
+- Behaviour follows the module PRDs in `prd/modules/` (each module's Lampiran A lists what was validated against this mockup).
 
 ## Stack
 
@@ -29,9 +30,12 @@ src/
   store/app-store.tsx     in-memory state, session, permissions, approval engine
   lib/rbac.ts             resources, {action}_{resource} permissions, default role matrix
   lib/approval.ts         approval steps per type, LOA tiers, order checks
-  data/mock.ts            dummy data (9 branches + HQ Direct Sales, 61 salesmen, ~320 outlets)
+  data/mock.ts            dummy data (9 branches + HQ Direct Sales, 61 salesmen, ~320 outlets,
+                          regions, routes, price lists, PJP change requests)
   pages/                  login, dashboard, pjp, outlets, pipeline, approvals, orders,
-                          targets, data (Odoo sync / Excel), users (RBAC), settings
+                          targets, reports, products (product & price list),
+                          territory (branch / region / route / sales team),
+                          data (Odoo sync / Excel), users (users, roles, permission, audit), settings
   components/             sidebar, topbar, toaster, badges, ui/ (shadcn)
 ```
 
@@ -48,21 +52,20 @@ src/
 
 You can switch role at any time from the user menu in the top right.
 
-## Demo script (about 10 steps)
+## Demo script (about 12 steps)
 
-1. **Login as Sales SPV (Dewi Lestari).** The sidebar shows only the pages her role can see, and the top bar shows the data scope *Cabang Surabaya · Tim Dewi*. The dashboard shows target vs actual per salesman, visits vs plan, the effective call ratio, pipeline per stage, overdue follow-ups and the approvals waiting for her.
-2. **PJP / Call Plan.** Pick a salesman. The 4-week grid shows outlets by frequency (A = F4, B = F2, C = F1). The orange dashed chips are *extra calls* that come from pipeline follow-ups. Add an outlet with **Tambah outlet**, remove one with the x on a chip, then click **Publish ke Mile Field** (a toast confirms that visit tasks were created).
-3. **Pipeline.** Use the Kanban (drag and drop) or the List view. Open a card: it shows the stage stepper, estimated value and next follow-up. Mark one opportunity **Batal** and pick a reason from the dropdown. Mark a *Pelanggan Baru (NOO)* opportunity **Menang**: an NOO approval (SPV, then Finance) is created automatically.
-4. **Approval → Diskon (LOA).** Dewi approves the 4% and 4.5% requests (SPV tier, up to 5%). The 7% request (linked to an order) shows *Menunggu Branch Manager / Commercial Director*. Open the eye icon to see the approval flow and the audit trail (user, permission, time, reason). A rejection requires a reason.
-5. **Approval → Pelanggan Baru (NOO).** Approve step 1 (data check by SPV). The request moves on to Finance.
-6. **Switch to Branch Manager (Budi).** The scope widens to the whole Surabaya branch. Approve the 7% discount that is linked to order `MF-ORD-2611-0243`, and step 1 of a *Pesanan Khusus* request (step 2 goes to the CD).
-7. **Switch to Sales Admin (Sari) → Review Pesanan.** Each order shows checks for price list, UoM, discount within LOA and credit / overdue. You can:
-   - change a quantity, with a required reason that is written to the log;
-   - on an order that is over the credit limit (`…0242`) or more than 30 days overdue (`…0245`), click **Ajukan approval** to send it to the *Limit Kredit* approval page;
-   - on a clean order, click **Konfirmasi & Kirim ke Odoo** (Varian A). The status runs *Mengirim ke Odoo → SO Draft di Odoo* and shows an SO number.
-8. **Switch to Finance (Agus).** Approve the credit-limit request. Go back to Sales Admin: the order is ready to confirm.
-9. **Switch to Admin (Rina) → Pengaturan.** Change to **Varian B**. The Data menu becomes *Import / Export Excel*: try an import with the validation preview (valid and rejected rows). Back in Review Pesanan, confirming an order now keeps the status in the module (*Dikonfirmasi → Diproses Gudang → Dikirim → Selesai*). Also turn on **Approval per tahap pipeline**, which adds the *Tahap Pipeline* approval page, and edit the LOA tiers.
-10. **Pengguna & Role → Permission.** This is the Shield-style matrix: one row per resource / page, with `view_any / view / create / update / delete` plus custom permissions (`approve_*`, `import_*`, `export_*`, `publish_pjp`, `confirm_order`, `sync_data`). Select *Sales SPV* and untick `approve_discount` or `view_any_pjp`. Then switch to Dewi: the menu or the buttons are gone straight away. Use **Reset default** to restore. **Sinkronkan dari MileApp** adds users (simulated).
+1. **Login as Sales SPV (Dewi Lestari).** The sidebar shows only her pages; the top bar shows *Cabang Surabaya · Tim Dewi*. The dashboard shows target vs actual, visits vs plan, effective call ratio, pipeline per stage, **overdue follow-ups (SPV / BM only)** and *Approval menunggu Anda* — click that card to jump to the approval page with the most waiting items.
+2. **Outlet / Pelanggan.** The three status cards (Pelanggan Baru / Lama – sudah beli / Lama – belum beli) are **derived**: hover the info icon for the rule. Open **Buat Outlet**: no status field, but GPS pin, NPWP / PKP, segmen, rute, price group, TOP. Type the name of an existing outlet (or its phone) → the **Kemungkinan Duplikat** dialog appears (*Tetap simpan sebagai outlet baru* / *Batal*). As SPV, limit kredit / TOP / price group are read-only in Varian B (only `update_credit_limit`, default Finance); in Varian A the Odoo fields carry an "Odoo" badge.
+3. **PJP / Call Plan.** Pick a salesman. The 4-week grid uses the class → frequency mapping from Pengaturan. The table shows the **route sequence** (move up / down) and *valid from / to*. **Tambah outlet** asks for the start date; removing and **Publish ke Mile Field** ask for confirmation. Tab **Permintaan Perubahan**: approve or reject the sales' change requests (`update_pjp`, no separate approve permission).
+4. **Pipeline.** A *Pelanggan Baru* opportunity carries an NOO badge (NOO is created at **Prospek**: prospect outlet + Approval NOO SPV → Finance). **Buat Peluang** with type Pelanggan Baru creates both. Mark an opportunity **Batal** with a reason → it stays in its stage with an hourglass: *Batal needs SPV approval by default*. Only *Pelanggan Baru (NOO)* can be chosen because the existing-customer pipeline is **off by default** (AS-14). Try the *Follow-up* filter (Terlambat / Hari ini / 7 hari).
+5. **Approval → Tahap Pipeline.** Dewi approves the Batal request; the card moves to Batal.
+6. **Approval → Diskon (LOA).** The discount requests go to the **single covering tier** (Dewi: up to 5%). The 7% order discount waits for the Branch Manager. Rejecting a discount that belongs to an order **rejects the order**. Requests pending > 24 h show *Lewat SLA*.
+7. **Approval → Pelanggan Baru (NOO).** Approve step 1 (data check). The request moves to Finance.
+8. **Switch to Branch Manager (Budi).** Scope widens to Cabang Surabaya. Approve the 7% discount (order `SO-SBY-202611-0243`) and step 1 of a *Pesanan Khusus* (step 2 goes to the CD). Budi also approves *Limit Kredit* (Finance or BM).
+9. **Switch to Finance (Agus).** On **Pelanggan Baru (NOO)** step 2, *Setujui* requires **limit kredit, TOP and price group**. The outlet becomes *Pelanggan Lama – belum beli* (Varian A: created in Odoo as res.partner). Approve the remaining *Limit Kredit* requests.
+10. **Switch to Sales Admin (Sari) → Review Pesanan.** Approval is routed **automatically** when an order arrives (setting *Pemicu approval*), so the orders with credit / overdue / special price / discount issues start in *Menunggu Approval* and return to *Menunggu Review* once all approvals are approved. On a review order: edit qty or **price**, **add / remove items** (reason required, logged); a price outside the price list sends the order back to approval. Click **Simulasi pesanan masuk**: the order for the NOO customer approved in step 9 arrives and the opportunity becomes **Menang automatically** (Menang = first approved order). **Konfirmasi & Kirim ke Odoo** (Varian A) → *SO Draft di Odoo* → **Baca status dari Odoo** → *Dikonfirmasi di Odoo*. **Export Excel** is available with `export_data`.
+11. **Switch to Admin (Rina) → Pengaturan.** Every card has its own **Simpan** (changes go to *Riwayat perubahan*): Pipeline & approval (Batal approval on, per-stage approval off, existing-customer pipeline off), Approval pesanan (trigger auto / manual, tier mode, credit approver, SLA), Tier LOA, read-only *Rantai approval*, PJP (class → frequency) and the other defaults. Switch to **Varian B**: Data becomes *Import / Export Excel*; in Review Pesanan confirm an order and move it *Dikonfirmasi → Diproses → Selesai* (or *Batalkan*). The first *Selesai* turns the customer into *Pelanggan Lama – sudah beli* automatically.
+12. **Pengguna & Role.** *Sinkronkan dari MileApp* adds users **without a role** (no access until an Admin assigns one). Tab **Role**: create / edit / duplicate / delete roles (delete is refused while users have the role). Tab **Permission**: the matrix now also has *Master Data* (`product`, `price_list`, `branch`, `region`, `route`, `sales_team`), *Laporan* (`*_report`, `approval_log`, `adoption`) and `update_credit_limit`; untick `approve_discount` for Sales SPV and the buttons disappear for Dewi. Tab **Audit** lists role / user / setting changes. Also open **Laporan** (standard reports + simulated Excel export + adoption view), **Produk & Price List** and **Territory & Tim Sales**.
 
 ## GitHub Pages
 
@@ -74,5 +77,7 @@ You can switch role at any time from the user menu in the top right.
 ## Notes / limits
 
 - Mockup only: no authentication, no persistence, no real Odoo or MileApp calls. All toasts and sync states are simulated.
-- The LOA tiers (Sales 2%, SPV 5%, BM 10%, CD above), the 30-day overdue rule and the F4 / F2 / F1 defaults are example values proposed by MileApp. UP sets the final numbers.
+- The LOA tiers (Sales 2%, SPV 5%, BM 10%, CD above), the 30-day overdue rule, the 24-hour SLA and the F4 / F2 / F1 defaults are example values proposed by MileApp. UP sets the final numbers.
+- Order numbers follow `SO-<branch>-<yyyymm>-<seq>`; the Mile Field client order id (`MF-ORD-…`) is shown only as a reference.
+- The duplicate check compares NPWP, phone, and similar names in the same city (a stand-in for the 50 m GPS radius).
 - The production stack for delivery remains Laravel + Inertia React + shadcn with `spatie/laravel-permission` and a per-resource permission generator.

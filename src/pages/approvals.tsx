@@ -4,6 +4,9 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PRICE_GROUPS } from "@/data/mock";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,7 +16,9 @@ import { EmptyState } from "@/components/empty-state";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
 import { APPROVAL_META, ROLE_META } from "@/lib/rbac";
 import type { ApprovalRequest, ApprovalType } from "@/data/types";
-import { fmtDate, rupiah } from "@/lib/format";
+import { fmtDate, nowStamp, rupiah } from "@/lib/format";
+
+const hoursSince = (at: string) => (new Date(nowStamp().replace(" ", "T")).getTime() - new Date(at.replace(" ", "T")).getTime()) / 3600000;
 import { cn } from "@/lib/utils";
 
 function StepTimeline({ a }: { a: ApprovalRequest }) {
@@ -45,11 +50,15 @@ function StepTimeline({ a }: { a: ApprovalRequest }) {
 }
 
 export function ApprovalPage({ type }: { type: ApprovalType }) {
-  const { approvals, inScope, can, canActOnStep, decideApproval, settings, session } = useApp();
+  const { approvals, inScope, can, canActOnStep, decideApproval, settings, session, orders, opps } = useApp();
   const meta = APPROVAL_META[type];
   const [tab, setTab] = useState<"pending" | "done" | "all">("pending");
   const [openId, setOpenId] = useState<string | null>(null);
-  const [decision, setDecision] = useState<{ id: string; approve: boolean; reason: string } | null>(null);
+  const [decision, setDecision] = useState<{ id: string; approve: boolean; reason: string; limit?: number; top?: number; priceGroup?: string } | null>(null);
+  const decA = decision ? approvals.find((a) => a.id === decision.id) : undefined;
+  /** NOO step 2 (Finance) must set credit limit, TOP and price group before approving (module 06 FR-010). */
+  const needsCredit = !!decision?.approve && decA?.type === "noo" && decA.steps.findIndex((s) => s.status === "pending") === 1;
+  const lateSla = (a: ApprovalRequest) => a.status === "pending" && hoursSince(a.createdAt) > settings.slaHours;
   const hasApprove = can(meta.perm);
 
   const list = useMemo(
@@ -111,7 +120,9 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
                 </Badge>
               );
             })}
-            <span className="text-xs text-muted-foreground">(contoh, angka final ditetapkan UP · ubah di Pengaturan)</span>
+            <span className="text-xs text-muted-foreground">
+              (contoh, angka final ditetapkan UP · ubah di Pengaturan) · {settings.discountTierMode === "single" ? "langsung ke satu tier yang mencakup; atasan boleh memutuskan" : "berurutan melalui setiap tier"} · menolak diskon = pesanan ditolak
+            </span>
           </CardContent>
         </Card>
       )}
@@ -155,7 +166,9 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
               <TableRow key={a.id}>
                 <TableCell>{i + 1}</TableCell>
                 <TableCell>
-                  <p className="font-medium">{a.title}</p>
+                  <p className="font-medium">
+                    {a.title} {lateSla(a) && <Badge variant="danger" title={`Pending lebih dari ${settings.slaHours} jam; penyetuju menerima pengingat (tanpa auto-approve)`}>Lewat SLA</Badge>}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {a.no} · {a.outletName}
                   </p>
@@ -210,6 +223,8 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
                     { label: "Nilai", value: rupiah(open.amount) },
                     ...(open.discountPct !== undefined ? [{ label: "Diskon", value: `${open.discountPct}%` }] : []),
                     ...open.details,
+                    ...(open.orderId ? [{ label: "Pesanan terkait", value: `${orders.find((o) => o.id === open.orderId)?.no ?? "—"} · ${orders.find((o) => o.id === open.orderId)?.status ?? ""}` }] : []),
+                    ...(open.oppId ? [{ label: "Peluang terkait", value: `${opps.find((o) => o.id === open.oppId)?.name ?? "—"} · ${opps.find((o) => o.id === open.oppId)?.stage ?? ""}` }] : []),
                   ].map((d) => (
                     <div key={d.label} className="flex gap-2">
                       <span className="w-28 shrink-0 text-muted-foreground">{d.label}</span>
@@ -274,6 +289,35 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
               <p className="text-sm">{approvals.find((a) => a.id === decision.id)?.title}</p>
               <Label>{decision.approve ? "Catatan (opsional)" : "Alasan penolakan (wajib)"}</Label>
               <Textarea value={decision.reason} onChange={(e) => setDecision({ ...decision, reason: e.target.value })} placeholder={decision.approve ? "mis. Margin masih aman" : "mis. Diskon melebihi program bulan ini"} />
+              {needsCredit && (
+                <div className="grid grid-cols-3 gap-4 rounded-md border border-[#9FE1FE] bg-[#E6F7FF] p-3">
+                  <div className="space-y-1">
+                    <Label>Limit kredit (Rp)</Label>
+                    <Input type="number" value={decision.limit ?? ""} onChange={(e) => setDecision({ ...decision, limit: Number(e.target.value) })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>TOP (hari)</Label>
+                    <Input type="number" value={decision.top ?? ""} onChange={(e) => setDecision({ ...decision, top: Number(e.target.value) })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Price group</Label>
+                    <Select value={decision.priceGroup ?? ""} onValueChange={(v) => setDecision({ ...decision, priceGroup: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRICE_GROUPS.map((g) => (
+                          <SelectItem key={g} value={g}>
+                            {g}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="col-span-3 text-xs text-[#01496A]">Wajib diisi Finance sebelum menyetujui. Nilai ini dipakai saat pelanggan diaktifkan{settings.variant === "A" ? " dan dibuat di Odoo (res.partner)" : ""}.</p>
+                </div>
+              )}
+              {!decision.approve && decA?.orderId && <p className="text-xs text-[#BF2130]">Menolak permintaan ini membuat pesanan terkait berstatus Ditolak.</p>}
               <p className="text-xs text-muted-foreground">Keputusan dicatat dengan pengguna, permission ({meta.perm}), waktu dan alasan.</p>
             </div>
           )}
@@ -283,10 +327,15 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
             </Button>
             <Button
               variant={decision?.approve ? "default" : "destructive"}
-              disabled={!decision?.approve && !decision?.reason}
+              disabled={(!decision?.approve && !decision?.reason) || (needsCredit && (!decision?.limit || !decision?.top || !decision?.priceGroup))}
               onClick={() => {
                 if (!decision) return;
-                decideApproval(decision.id, decision.approve, decision.reason);
+                decideApproval(
+                  decision.id,
+                  decision.approve,
+                  decision.reason,
+                  needsCredit ? { nooCredit: { limit: decision.limit!, top: decision.top!, priceGroup: decision.priceGroup! } } : undefined
+                );
                 setDecision(null);
               }}
             >

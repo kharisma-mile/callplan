@@ -219,12 +219,12 @@ function ExcelImport() {
           <CardTitle className="text-base">Import awal dari Odoo (sekali saat setup)</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2 pt-0">
-          {["Pelanggan", "Produk & UoM", "Price list", "Saldo piutang & limit kredit", "Status beli pelanggan"].map((s, i) => (
+          {["UoM", "Produk", "Price list", "Pelanggan", "Saldo piutang & limit kredit", "Status beli pelanggan"].map((s, i) => (
             <div key={s} className="flex items-center gap-2">
               <span className="flex items-center gap-1.5 rounded-md bg-[#D8F8E9] px-2 py-1 text-xs font-medium text-[#115A38]">
                 <CheckCircle2 className="h-3.5 w-3.5" /> {s}
               </span>
-              {i < 4 && <span className="text-muted-foreground">→</span>}
+              {i < 5 && <span className="text-muted-foreground">→</span>}
             </div>
           ))}
           <Badge variant="neutral" className="ml-auto">

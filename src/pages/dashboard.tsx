@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { AlarmClock, ClipboardCheck, Footprints, GitBranch, Target, Zap } from "lucide-react";
+import { AlarmClock, ClipboardCheck, PackageCheck, Footprints, GitBranch, Target, Zap } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StageBadge } from "@/components/status-badge";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
 import { BRANCHES, CURRENT_MONTH, PRODUCTS, SALESMEN, TODAY, VISITS } from "@/data/mock";
-import { ROLE_META, APPROVAL_META } from "@/lib/rbac";
+import { APPROVAL_META } from "@/lib/rbac";
 import { fmtDate, fmtMonth, pct, rupiahShort } from "@/lib/format";
 import type { OppStage } from "@/data/types";
 
@@ -33,9 +33,10 @@ function Bar({ label, sub, actual, target, tone = "primary" }: { label: string; 
 }
 
 export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void }) {
-  const { user, scopeSalesIds, inScope, targets, opps, approvals, canActOnStep, scopeLabel } = useApp();
+  const { user, scopeSalesIds, inScope, targets, opps, approvals, orders, canActOnStep, scopeLabel, roleMeta, can } = useApp();
+  const showOverdue = user!.role === "spv" || user!.role === "bm";
   const role = user!.role;
-  const scope = ROLE_META[role].scope;
+  const scope = roleMeta(role).scope;
 
   const data = useMemo(() => {
     const salesT = targets.sales.filter((t) => t.month === CURRENT_MONTH && inScope(t.key));
@@ -70,12 +71,17 @@ export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void 
   const maxStage = Math.max(1, ...stageStats.map((s) => s.value));
   const pendingByType = Object.keys(APPROVAL_META).map((t) => ({ t, n: data.pending.filter((p) => p.type === t).length })).filter((x) => x.n > 0);
 
+  const topPending = [...pendingByType].sort((a, b) => b.n - a.n)[0]?.t;
+  const firstApprovalPage = (Object.keys(APPROVAL_META) as (keyof typeof APPROVAL_META)[]).find((t) => can(`view_any_${APPROVAL_META[t].resource}`));
+  const approvalTarget = topPending ?? firstApprovalPage;
+  const reviewCount = orders.filter((o) => inScope(o.salesId) && o.status === "Menunggu Review").length;
+
   const lowCompliance = [...data.visits].sort((a, b) => a.actual / a.planned - b.actual / b.planned).slice(0, 6);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Dashboard ${ROLE_META[role].label}`}
+        title={`Dashboard ${roleMeta(role).label}`}
         subtitle={`${scopeLabel} · ${fmtMonth(CURRENT_MONTH)} · data per ${fmtDate(TODAY)}`}
         action={<Badge variant="neutral">{scopeSalesIds.length} salesman dalam cakupan</Badge>}
       />
@@ -85,8 +91,26 @@ export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void 
         <StatCard icon={Footprints} tone="success" label="Kunjungan vs Rencana" value={`${pct(data.done, data.planned)}%`} hint={`${data.done} dari ${data.planned} call (PJP)`} />
         <StatCard icon={Zap} tone="orange" label="Effective Call Ratio" value={`${pct(data.eff, data.done)}%`} hint={`${data.eff} kunjungan dengan pesanan`} />
         <StatCard icon={GitBranch} label="Pipeline aktif" value={String(data.open.length)} hint={rupiahShort(data.open.reduce((a, o) => a + o.value, 0)) + " estimasi"} onClick={() => onNavigate("pipeline")} />
-        <StatCard icon={AlarmClock} tone="danger" label="Follow-up terlambat" value={String(data.overdue.length)} hint="lewat tanggal follow-up" onClick={() => onNavigate("pipeline")} />
-        <StatCard icon={ClipboardCheck} tone="warning" label="Approval menunggu Anda" value={String(data.pending.length)} hint={pendingByType.map((p) => `${APPROVAL_META[p.t as keyof typeof APPROVAL_META].short} ${p.n}`).join(" · ") || "tidak ada"} />
+        {showOverdue ? (
+          <StatCard icon={AlarmClock} tone="danger" label="Follow-up terlambat" value={String(data.overdue.length)} hint="lewat tanggal follow-up" onClick={() => onNavigate("pipeline")} />
+        ) : (
+          <StatCard
+            icon={PackageCheck}
+            tone="danger"
+            label="Pesanan menunggu review"
+            value={String(reviewCount)}
+            hint="antrian Sales Admin"
+            onClick={can("view_any_order") ? () => onNavigate("orders") : undefined}
+          />
+        )}
+        <StatCard
+          icon={ClipboardCheck}
+          tone="warning"
+          label="Approval menunggu Anda"
+          value={String(data.pending.length)}
+          hint={pendingByType.map((p) => `${APPROVAL_META[p.t as keyof typeof APPROVAL_META].short} ${p.n}`).join(" · ") || "tidak ada"}
+          onClick={approvalTarget ? () => onNavigate(`approval/${approvalTarget}`) : undefined}
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -122,7 +146,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void 
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className={`grid gap-4 ${showOverdue ? "xl:grid-cols-3" : "xl:grid-cols-2"}`}>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Target vs aktual per produk</CardTitle>
@@ -165,6 +189,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void 
             </Table>
           </CardContent>
         </Card>
+        {showOverdue && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Follow-up terlambat</CardTitle>
@@ -184,6 +209,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void 
             ))}
           </CardContent>
         </Card>
+        )}
       </div>
       <p className="text-xs text-muted-foreground">
         Sumber kunjungan dan effective call: hasil kunjungan Mile Field (webhook). {SALESMEN.length} salesman total, 9 cabang + HQ Direct Sales.

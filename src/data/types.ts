@@ -3,9 +3,47 @@ export type Variant = "A" | "B";
 export type ScopeType = "all" | "branch" | "team";
 
 export interface Branch {
-  id: string;
+  id: string; // also the branch code used in document numbers (SO-<branch>-..., C-<branch>-...)
   name: string;
   city: string;
+  regionId?: string;
+  active?: boolean;
+}
+
+/** Module 03: territory master (PRD-only pages). */
+export interface Region {
+  id: string;
+  name: string;
+  branchIds: string[];
+  active: boolean;
+}
+
+export interface Route {
+  id: string;
+  code: string;
+  name: string;
+  branchId: string;
+  salesId?: string;
+  area: string;
+  active: boolean;
+}
+
+/** Module 02: price list per channel / region (PRD-only page). */
+export interface PriceListItem {
+  productId: string;
+  uom: string;
+  price: number;
+}
+
+export interface PriceList {
+  id: string;
+  name: string;
+  channel: string; // = price group used on the outlet
+  regionId: string | "all";
+  validFrom: string;
+  validTo?: string;
+  active: boolean;
+  items: PriceListItem[];
 }
 
 export interface Salesman {
@@ -22,11 +60,22 @@ export interface Spv {
   branchId: string;
 }
 
+/** Role definition: 6 built-in roles + roles created in Pengguna & Role (module 12). */
+export interface RoleDef {
+  key: string;
+  label: string;
+  scope: ScopeType;
+  scopeLabel: string;
+  desc: string;
+  builtin: boolean;
+}
+
 export interface ModuleUser {
   id: string;
   name: string;
   email: string;
-  role: RoleKey;
+  /** null = synced from MileApp, no role assigned yet (no access until an Admin assigns one). */
+  role: string | null;
   branchId?: string;
   spvId?: string;
   active: boolean;
@@ -57,6 +106,14 @@ export interface Outlet {
   top: number; // term of payment days
   lastOrder?: string;
   odooRef?: string;
+  /** false = deactivated (outlet with transactions is never deleted physically). */
+  active: boolean;
+  gps?: { lat: number; lng: number };
+  npwp?: string;
+  pkp: boolean;
+  priceGroup: string;
+  routeId?: string;
+  source: "odoo" | "import" | "noo" | "manual";
 }
 
 export interface UomPrice {
@@ -70,7 +127,8 @@ export interface Product {
   sku: string;
   name: string;
   category: string;
-  uoms: UomPrice[];
+  uoms: UomPrice[]; // uoms[0] = base UoM
+  active?: boolean;
 }
 
 export interface PjpEntry {
@@ -80,6 +138,24 @@ export interface PjpEntry {
   day: number; // 0 = Senin .. 5 = Sabtu
   freq: Frequency;
   weeks: number[]; // 1..4
+  seq: number; // visit order within the day (route sequence)
+  validFrom: string;
+  validTo?: string;
+}
+
+/** Module 04: PJP change request from Sales / BM, decided by SPV with `update_pjp`. */
+export interface PjpChangeRequest {
+  id: string;
+  salesId: string;
+  outletId: string;
+  kind: "Tambah" | "Hapus" | "Ubah hari";
+  detail: string;
+  reason: string;
+  requestedBy: string;
+  at: string;
+  status: "pending" | "approved" | "rejected";
+  decidedBy?: string;
+  decisionReason?: string;
 }
 
 export type OppStage = "Prospek" | "Dijadwalkan" | "Kunjungan & Negosiasi" | "Menang" | "Batal";
@@ -106,6 +182,9 @@ export interface Opportunity {
   batalReason?: string;
   note?: string;
   pendingStage?: OppStage;
+  /** NOO prospect outlet (status Pelanggan Baru) created at Prospek, or the existing customer. */
+  outletId?: string;
+  wonOrderId?: string;
   createdAt: string;
   log: OppLog[];
 }
@@ -147,6 +226,9 @@ export interface ApprovalRequest {
   oppId?: string;
   discountPct?: number;
   toStage?: OppStage;
+  outletId?: string;
+  /** NOO step 2: credit data set by Finance. */
+  nooCredit?: { limit: number; top: number; priceGroup: string };
 }
 
 export interface OrderItem {
@@ -156,21 +238,25 @@ export interface OrderItem {
   price: number;
 }
 
+/** Module 07 state machine. A: ... → SO Draft di Odoo → Dikonfirmasi di Odoo / Dibatalkan (read-back).
+ *  B: ... → Dikonfirmasi → Diproses → Selesai, or Dibatalkan. Delivery is out of scope. */
 export type OrderStatus =
   | "Menunggu Review"
   | "Menunggu Approval"
   | "Mengirim ke Odoo"
   | "Gagal Sinkron"
   | "SO Draft di Odoo"
+  | "Dikonfirmasi di Odoo"
   | "Dikonfirmasi"
-  | "Diproses Gudang"
-  | "Dikirim"
+  | "Diproses"
   | "Selesai"
+  | "Dibatalkan"
   | "Ditolak";
 
 export interface Order {
   id: string;
-  no: string;
+  no: string; // SO-<branch>-<yyyymm>-<seq>
+  mfRef: string; // client order id from Mile Field (idempotency key, reference only)
   outletId: string;
   salesId: string;
   date: string;
@@ -184,10 +270,24 @@ export interface Order {
 }
 
 export interface TargetRow {
-  key: string; // salesId / branchId / productId
+  key: string; // salesId / branchId / productId / category
   month: string; // YYYY-MM
   target: number;
   actual: number;
+  targetQty?: number; // base UoM
+  actualQty?: number;
+}
+
+export interface TargetChange {
+  at: string;
+  by: string;
+  level: string;
+  key: string;
+  month: string;
+  field: "nilai" | "qty";
+  from: number;
+  to: number;
+  source: "layar" | "import";
 }
 
 export interface LoaTier {
@@ -199,9 +299,35 @@ export interface LoaTier {
 export interface Settings {
   variant: Variant;
   pipelineStageApproval: boolean;
+  /** AS-15: Batal needs SPV approval (default on). */
+  pipelineBatalApproval: boolean;
   existingCustomerPipeline: boolean;
   overdueDays: number;
   loa: LoaTier[];
+  /** Module 06 FR-002: approval requests created automatically on order ingest (PRD default) or by Sales Admin. */
+  approvalTrigger: "auto" | "manual";
+  /** Single covering tier (PRD default) or sequential through every tier below. */
+  discountTierMode: "single" | "sequential";
+  discountBasis: "line" | "order";
+  creditApprover: "finance_or_bm" | "finance" | "bm";
+  slaHours: number;
+  salesAdminReview: boolean;
+  orderWithoutVisitHQ: boolean;
+  nooOrderBeforeFinance: boolean;
+  minOrder: boolean;
+  geofenceM: number;
+  classFreq: Record<OutletClass, Frequency>;
+  belumBeliFreq: Frequency;
+  spvEditPjpDirect: boolean;
+}
+
+export interface AuditLogEntry {
+  at: string;
+  by: string;
+  module: string;
+  action: string;
+  target: string;
+  detail?: string;
 }
 
 export interface SyncDomain {

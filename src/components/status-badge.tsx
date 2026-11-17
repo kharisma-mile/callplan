@@ -10,10 +10,11 @@ const ORDER: Record<OrderStatus, V> = {
   "Mengirim ke Odoo": "info",
   "Gagal Sinkron": "danger",
   "SO Draft di Odoo": "success",
+  "Dikonfirmasi di Odoo": "success",
   Dikonfirmasi: "success",
-  "Diproses Gudang": "info",
-  Dikirim: "info",
+  Diproses: "info",
   Selesai: "neutral",
+  Dibatalkan: "danger",
   Ditolak: "danger",
 };
 const STAGE: Record<OppStage, V> = {

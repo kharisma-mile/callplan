@@ -53,7 +53,17 @@ function Stepper({ opp }: { opp: Opportunity }) {
 }
 
 export function PipelinePage() {
-  const { opps, setOpps, inScope, scopeSalesIds, can, moveOpp, toast, settings, user } = useApp();
+  const { opps, setOpps, inScope, scopeSalesIds, can, moveOpp, toast, settings, user, createOpp, approvals, outlets } = useApp();
+  const [followFilter, setFollowFilter] = useState<"all" | "late" | "today" | "week">("all");
+  const [delOpp, setDelOpp] = useState<Opportunity | null>(null);
+  const nooOf = (o: Opportunity) => approvals.find((a) => a.type === "noo" && a.oppId === o.id);
+  const nooLabel = (o: Opportunity) => {
+    const a = nooOf(o);
+    if (!a) return o.outletId && outlets.find((x) => x.id === o.outletId)?.status !== "baru" ? "NOO disetujui" : null;
+    if (a.status === "approved") return "NOO disetujui";
+    if (a.status === "rejected") return "NOO ditolak";
+    return `NOO: menunggu ${a.steps.find((s) => s.status === "pending")?.label.includes("Finance") ? "Finance" : "SPV"}`;
+  };
   const [view, setView] = useState<"kanban" | "list">("kanban");
   const [salesFilter, setSalesFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -68,8 +78,15 @@ export function PipelinePage() {
     () =>
       opps
         .filter((o) => inScope(o.salesId) && (salesFilter === "all" || o.salesId === salesFilter) && (typeFilter === "all" || o.type === typeFilter))
+        .filter((o) => {
+          if (followFilter === "all") return true;
+          if (o.stage === "Menang" || o.stage === "Batal") return false;
+          if (followFilter === "late") return o.nextDate < TODAY;
+          if (followFilter === "today") return o.nextDate === TODAY;
+          return o.nextDate >= TODAY && o.nextDate <= addDays(TODAY, 7);
+        })
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [opps, inScope, salesFilter, typeFilter]
+    [opps, inScope, salesFilter, typeFilter, followFilter]
   );
   const detail = opps.find((o) => o.id === detailId) ?? null;
   const canEdit = can("update_opportunity");
@@ -103,7 +120,10 @@ export function PipelinePage() {
             </span>
           )}
         </div>
-        <Badge variant={o.type === "Pelanggan Baru (NOO)" ? "info" : "orange"}>{o.type}</Badge>
+        <div className="flex flex-wrap gap-1">
+          <Badge variant={o.type === "Pelanggan Baru (NOO)" ? "info" : "orange"}>{o.type}</Badge>
+          {o.stage !== "Menang" && o.stage !== "Batal" && nooLabel(o) && <Badge variant={nooLabel(o) === "NOO disetujui" ? "success" : "warning"}>{nooLabel(o)}</Badge>}
+        </div>
         <div className="flex items-center justify-between text-xs">
           <span className="font-semibold text-foreground">{rupiahShort(o.value)}</span>
           <span className="text-muted-foreground">{salesOf(o.salesId).name}</span>
@@ -115,7 +135,7 @@ export function PipelinePage() {
             <CalendarClock className="h-3.5 w-3.5" /> {o.nextKind} · {fmtDate(o.nextDate)} {late && "(terlambat)"}
           </p>
         ) : (
-          <p className="text-xs text-[#198754]">Pesanan pertama · NOO diproses</p>
+          <p className="text-xs text-[#198754]">Pesanan pertama disetujui</p>
         )}
       </div>
     );
@@ -128,7 +148,13 @@ export function PipelinePage() {
         subtitle={
           <>
             4 tahap sederhana: Prospek → Dijadwalkan → Kunjungan &amp; Negosiasi → Menang / Batal.{" "}
-            {settings.pipelineStageApproval ? <b className="text-[#BA4917]">Approval per tahap aktif.</b> : "Perpindahan tahap bebas (approval hanya di NOO)."}
+            {settings.pipelineStageApproval ? (
+              <b className="text-[#BA4917]">Approval SPV per tahap aktif (setiap perpindahan).</b>
+            ) : settings.pipelineBatalApproval ? (
+              "NOO dibuat di tahap Prospek (approval SPV → Finance); Menang = pesanan pertama disetujui; Batal perlu approval SPV."
+            ) : (
+              "NOO dibuat di tahap Prospek (approval SPV → Finance); Menang = pesanan pertama disetujui; perpindahan tahap lain bebas."
+            )}
           </>
         }
         action={
@@ -192,6 +218,17 @@ export function PipelinePage() {
                 {t}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={followFilter} onValueChange={(v) => setFollowFilter(v as typeof followFilter)}>
+          <SelectTrigger className="w-[200px] bg-background">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua follow-up</SelectItem>
+            <SelectItem value="late">Terlambat</SelectItem>
+            <SelectItem value="today">Hari ini</SelectItem>
+            <SelectItem value="week">7 hari ke depan</SelectItem>
           </SelectContent>
         </Select>
         <span className="ml-auto text-sm text-muted-foreground">
@@ -280,10 +317,7 @@ export function PipelinePage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
-                              onClick={() => {
-                                setOpps((l) => l.filter((x) => x.id !== o.id));
-                                toast({ tone: "danger", title: "Peluang dihapus", desc: o.name });
-                              }}
+                              onClick={() => setDelOpp(o)}
                             >
                               <Trash2 /> Hapus
                             </DropdownMenuItem>
@@ -315,6 +349,12 @@ export function PipelinePage() {
                   </p>
                 </div>
                 <Stepper opp={detail} />
+                {detail.outletId && (
+                  <p className="rounded-md bg-muted p-2 text-xs">
+                    Outlet: <b>{outlets.find((x) => x.id === detail.outletId)?.code}</b> · {nooLabel(detail) ?? "pelanggan terdaftar"}
+                    {detail.stage !== "Menang" && detail.stage !== "Batal" && " · otomatis Menang saat pesanan pertama disetujui"}
+                  </p>
+                )}
                 {detail.pendingStage && (
                   <p className="rounded-md bg-[#FCEEE8] p-2 text-xs text-[#8D3711]">
                     Menunggu approval SPV untuk pindah ke <b>{detail.pendingStage}</b> (halaman Approval Tahap Pipeline).
@@ -440,6 +480,34 @@ export function PipelinePage() {
         </DialogContent>
       </Dialog>
 
+      {/* delete confirm */}
+      <Dialog open={!!delOpp} onOpenChange={(v) => !v && setDelOpp(null)}>
+        <DialogContent className="gap-0 p-0">
+          <DialogHeader>
+            <DialogTitle>Hapus Peluang</DialogTitle>
+          </DialogHeader>
+          <p className="p-4 text-sm">
+            Hapus <b>{delOpp?.name}</b> dari pipeline? Riwayat peluang ikut terhapus.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDelOpp(null)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!delOpp) return;
+                setOpps((l) => l.filter((x) => x.id !== delOpp.id));
+                toast({ tone: "danger", title: "Peluang dihapus", desc: delOpp.name });
+                setDelOpp(null);
+              }}
+            >
+              Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* create */}
       <Dialog open={!!create} onOpenChange={(v) => !v && setCreate(null)}>
         <DialogContent className="gap-0 p-0">
@@ -448,6 +516,14 @@ export function PipelinePage() {
           </DialogHeader>
           {create && (
             <div className="grid grid-cols-2 gap-4 p-4">
+              {create.type === "Pelanggan Baru (NOO)" && (
+                <p className="col-span-2 rounded-md border border-[#9FE1FE] bg-[#E6F7FF] p-2 text-xs text-[#01496A]">
+                  Jenis Pelanggan Baru: NOO dibuat di tahap Prospek (outlet prospek berstatus Pelanggan Baru + Approval NOO SPV → Finance). Jalur utama tetap registrasi NOO dari Mile Field.
+                </p>
+              )}
+              {!settings.existingCustomerPipeline && (
+                <p className="col-span-2 text-xs text-muted-foreground">Pipeline pelanggan lama nonaktif (default). Aktifkan di Pengaturan untuk jenis produk baru / proyek.</p>
+              )}
               <div className="col-span-2 space-y-1">
                 <Label>Nama prospek / peluang</Label>
                 <Input value={create.name} onChange={(e) => setCreate({ ...create, name: e.target.value })} placeholder="mis. Katering Bu Ani" />
@@ -520,8 +596,7 @@ export function PipelinePage() {
               onClick={() => {
                 if (!create) return;
                 const o = { ...create, id: nextOppId(), log: [{ at: nowStamp(), by: user!.name, text: "Peluang dibuat di web" }] };
-                setOpps((l) => [o, ...l]);
-                toast({ tone: "success", title: "Peluang dibuat", desc: `${o.name} · ${o.nextKind === "Kunjungan" ? "masuk call plan sebagai extra call" : o.nextKind}` });
+                createOpp(o);
                 setCreate(null);
               }}
             >
