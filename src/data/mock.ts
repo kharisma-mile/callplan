@@ -294,10 +294,14 @@ for (const s of SALESMEN) {
 export const PJP_HEADERS: PjpHeader[] = SALESMEN.map((s, i) => ({
   salesId: s.id,
   version: 2 + (i % 3),
-  status: s.id === "S-SBY-02" ? "Disetujui" : "Dipublikasikan",
+  status: s.id === "S-SBY-02" ? "Disetujui" : s.id === "S-SBY-03" ? "Menunggu Approval" : "Dipublikasikan",
   validFrom: "2026-10-05",
-  publishedAt: s.id === "S-SBY-02" ? undefined : "2026-11-16 06:00",
-  note: s.id === "S-SBY-02" ? "Perubahan disetujui, menunggu publish" : undefined,
+  publishedAt: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? undefined : "2026-11-16 06:00",
+  note: s.id === "S-SBY-02" ? "Disetujui, menunggu publish" : s.id === "S-SBY-03" ? "Diajukan SPV, menunggu approval" : undefined,
+  submittedBy: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? "SPV Surabaya" : undefined,
+  submittedAt: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? "2026-11-17 15:00" : undefined,
+  approvedBy: s.id === "S-SBY-02" ? "BM Surabaya" : undefined,
+  approvedAt: s.id === "S-SBY-02" ? "2026-11-17 16:30" : undefined,
 }));
 
 /** Holiday calendar (dummy). National holidays apply to all branches; branchIds limits a local holiday. */
@@ -483,7 +487,8 @@ export const DEFAULT_SETTINGS: Settings = {
   generateKeepRoute: true,
   routeStartPoint: "branch",
   reminderTime: "07:00",
-  spvEditPjpDirect: true,
+  spvEditPjpDirect: false,
+  pjpApprover: "bm",
   loa: [
     { role: "sales_admin", label: "Sales (tanpa approval)", max: 2 },
     { role: "spv", label: "Sales SPV", max: 5 },

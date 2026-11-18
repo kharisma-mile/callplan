@@ -26,7 +26,27 @@ function nextMonday(iso: string) {
   return addDays(iso, d === 1 ? 7 : (8 - d) % 7 || 7);
 }
 const weekAlt = (e: Pick<PjpEntry, "freq" | "weeks">) => (e.freq === "F1" ? e.weeks[0] - 1 : e.freq === "F2" ? (e.weeks[0] === 1 ? 0 : 1) : 0);
-type Tab = "plan" | "coverage" | "exec" | "requests";
+type Tab = "plan" | "coverage" | "exec" | "requests" | "approval";
+const STEPS = ["Draft", "Menunggu Approval", "Disetujui", "Dipublikasikan"] as const;
+const APPROVER_ROLES = { bm: ["bm"], spv: ["spv"], regional: ["cd"] } as const;
+const APPROVER_LABEL = { bm: "Branch Manager", spv: "Sales SPV", regional: "Regional Manager" } as const;
+
+/** Small status stepper: Draft → Menunggu Approval → Disetujui → Dipublikasikan. */
+function Stepper({ status }: { status: string }) {
+  const cur = STEPS.indexOf(status as (typeof STEPS)[number]);
+  return (
+    <ol className="flex flex-wrap items-center gap-1 text-[11px]">
+      {STEPS.map((st, i) => (
+        <li key={st} className="flex items-center gap-1">
+          <span className={cn("flex items-center gap-1 rounded-full px-2 py-0.5 font-medium", i < cur ? "bg-[#DDF3E4] text-[#1E6B3A]" : i === cur ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+            {i < cur ? <Check className="h-3 w-3" /> : <span>{i + 1}</span>} {st}
+          </span>
+          {i < STEPS.length - 1 && <span className="text-muted-foreground">→</span>}
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export function PjpPage() {
   const app = useApp();
@@ -44,6 +64,7 @@ export function PjpPage() {
   const [genOpen, setGenOpen] = useState(false);
   const [impOpen, setImpOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
+  const [pjpDecision, setPjpDecision] = useState<{ salesId: string; reason: string } | null>(null);
   const [decision, setDecision] = useState<{ id: string; approve: boolean; reason: string } | null>(null);
   const [drag, setDrag] = useState<{ id: string; day: number } | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -56,7 +77,12 @@ export function PjpPage() {
   const settings = useMemo(() => withCapacity(baseSettings, s?.branchId), [baseSettings, s?.branchId]);
   /** Lock after publish: only SPV / Admin with "SPV edit langsung" change a published PJP directly; others go through a change request. */
   const role = app.session?.role ?? "";
-  const locked = settings.lockAfterPublish && header?.status === "Dipublikasikan" && !(settings.spvEditPjpDirect && (role === "spv" || role === "admin"));
+  const bypass = settings.spvEditPjpDirect && (role === "spv" || role === "admin");
+  const pendingLock = header?.status === "Menunggu Approval";
+  const locked = pendingLock || (settings.lockAfterPublish && header?.status === "Dipublikasikan" && !bypass);
+  const approverRoles = [...APPROVER_ROLES[settings.pjpApprover], "admin"] as string[];
+  const canApprovePjp = can("approve_pjp") && approverRoles.includes(role);
+  const pendingPjps = pjpHeaders.filter((h) => h.status === "Menunggu Approval" && inScope(h.salesId));
   const canApprove = can("update_pjp") && (settings.changeApprover === "spv_bm" ? ["spv", "bm", "admin"] : ["spv", "admin"]).includes(role);
   const canCreate = can("create_pjp") && !locked;
   const canUpdate = can("update_pjp") && !locked;
@@ -78,8 +104,34 @@ export function PjpPage() {
   const nextStart = cycleStart(cycle + 1);
   const hasNextVersion = pjp.some((e) => e.salesId === salesId && e.validFrom >= cycleStart(1));
 
+  /** Any change returns the PJP to Draft (published version stays locked: change creates a new Draft version). Bypass setting (default off) jumps to Disetujui. */
   const markChanged = (ids: string[], note = "Perubahan belum dipublikasikan") =>
-    setPjpHeaders((hs) => hs.map((h) => (ids.includes(h.salesId) ? { ...h, status: settings.spvEditPjpDirect ? "Disetujui" : "Draft", note } : h)));
+    setPjpHeaders((hs) =>
+      hs.map((h) => {
+        if (!ids.includes(h.salesId)) return h;
+        const nv = h.status === "Dipublikasikan" ? h.version + 1 : h.version;
+        return { ...h, version: nv, status: bypass ? "Disetujui" : "Draft", note: h.status === "Dipublikasikan" ? `Versi ${nv} (Draft) dari perubahan setelah publish` : note, publishedAt: h.status === "Dipublikasikan" ? undefined : h.publishedAt };
+      }),
+    );
+  const submitApproval = () => {
+    setPjpHeaders((hs) => hs.map((h) => (h.salesId === salesId ? { ...h, status: "Menunggu Approval", submittedBy: user?.name, submittedAt: nowStamp(), rejectReason: undefined, note: `Diajukan ${user?.name ?? ""}, menunggu ${APPROVER_LABEL[settings.pjpApprover]}` } : h)));
+    addAudit({ module: "PJP", action: "PJP diajukan untuk approval", target: s.name, detail: `Versi ${header?.version} · penyetuju ${APPROVER_LABEL[settings.pjpApprover]} (update_pjp)` });
+    toast({ tone: "success", title: "PJP diajukan untuk approval", desc: `${s.name} · versi ${header?.version} menunggu ${APPROVER_LABEL[settings.pjpApprover]}. PJP terkunci sampai diputuskan.` });
+  };
+  const approvePjp = (id: string) => {
+    const h = pjpHeaders.find((x) => x.salesId === id);
+    setPjpHeaders((hs) => hs.map((x) => (x.salesId === id ? { ...x, status: "Disetujui", approvedBy: user?.name, approvedAt: nowStamp(), rejectReason: undefined, note: "Disetujui, siap dipublikasikan" } : x)));
+    addAudit({ module: "PJP", action: "PJP disetujui", target: salesOf(id).name, detail: `Versi ${h?.version} (approve_pjp)` });
+    toast({ tone: "success", title: "PJP disetujui", desc: `${salesOf(id).name} · versi ${h?.version}. Sekarang bisa dipublikasikan ke Mile Field.` });
+  };
+  const rejectPjp = () => {
+    if (!pjpDecision) return;
+    const { salesId: id, reason } = pjpDecision;
+    setPjpHeaders((hs) => hs.map((x) => (x.salesId === id ? { ...x, status: "Draft", rejectReason: reason, note: `Ditolak ${user?.name ?? ""}: ${reason}` } : x)));
+    addAudit({ module: "PJP", action: "PJP ditolak", target: salesOf(id).name, detail: `${reason} (approve_pjp)` });
+    toast({ tone: "danger", title: "PJP ditolak", desc: `${salesOf(id).name} kembali ke Draft · ${reason}` });
+    setPjpDecision(null);
+  };
 
   /** Calls planned in one cell (incl. holiday shifts and follow-up extra calls). */
   const cellInfo = (w: number, d: number) => {
@@ -282,7 +334,7 @@ export function PjpPage() {
     const o = outletMap.get(e.outletId);
     return `${o?.name} ${o?.code}`.toLowerCase().includes(q.toLowerCase());
   });
-  const statusVariant = header?.status === "Dipublikasikan" ? "success" : header?.status === "Disetujui" ? "info" : "warning";
+  const statusVariant = header?.status === "Dipublikasikan" ? "success" : header?.status === "Disetujui" ? "info" : header?.status === "Menunggu Approval" ? "orange" : "warning";
   const onDragStart = (ev: DragEvent, id: string, day: number) => {
     ev.dataTransfer.effectAllowed = "move";
     ev.dataTransfer.setData("text/plain", id);
@@ -321,8 +373,13 @@ export function PjpPage() {
                 <Plus /> Tambah outlet
               </Button>
             )}
+            {(can("create_pjp") || can("update_pjp")) && header?.status === "Draft" && (
+              <Button variant="outline" onClick={submitApproval} disabled={entries.length === 0}>
+                <Check /> Ajukan Approval
+              </Button>
+            )}
             {can("publish_pjp") && (
-              <Button onClick={() => setPubOpen(true)}>
+              <Button onClick={() => setPubOpen(true)} disabled={header?.status !== "Disetujui"} title={header?.status !== "Disetujui" ? "Publish hanya untuk PJP berstatus Disetujui (approval wajib sebelum publish)" : undefined}>
                 <Send /> Publish ke Mile Field
               </Button>
             )}
@@ -336,6 +393,7 @@ export function PjpPage() {
             ["plan", "Rencana PJP"],
             ["coverage", "Cakupan & Beban"],
             ["exec", "Eksekusi"],
+            ["approval", `Approval PJP (${pendingPjps.length})`],
             ["requests", `Permintaan Perubahan (${pendingReq})`],
           ] as const
         ).map(([k, l]) => (
@@ -345,7 +403,7 @@ export function PjpPage() {
         ))}
       </div>
 
-      {tab !== "requests" && (
+      {tab !== "requests" && tab !== "approval" && (
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap items-end gap-4">
@@ -389,6 +447,8 @@ export function PjpPage() {
                 </>
               )}
             </div>
+            {header && <Stepper status={header.status} />}
+            {header?.status === "Draft" && header.rejectReason && <p className="text-xs text-[#DC3545]">Ditolak penyetuju: {header.rejectReason}. Perbaiki lalu ajukan ulang.</p>}
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <Badge variant="neutral">{branchOf(s.branchId).name}</Badge>
               {header && (
@@ -406,6 +466,16 @@ export function PjpPage() {
               </Badge>
               <Badge variant="orange">{extra.length} extra call follow-up</Badge>
               {header?.note && <span className="text-muted-foreground">{header.note}</span>}
+              {header && canApprovePjp && header.status === "Menunggu Approval" && (
+                <span className="ml-auto flex gap-2">
+                  <Button size="sm" onClick={() => approvePjp(salesId)}>
+                    <Check /> Setujui PJP
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-[#DC3545] hover:bg-[#FAE5E7] hover:text-[#68121A]" onClick={() => setPjpDecision({ salesId, reason: "" })}>
+                    <X /> Tolak
+                  </Button>
+                </span>
+              )}
               {canCreate && cycle === 0 && !hasNextVersion && (
                 <Button size="sm" variant="outline" className="ml-auto" onClick={() => setCopyOpen(true)}>
                   <Copy /> Salin ke siklus berikutnya
@@ -416,11 +486,67 @@ export function PjpPage() {
         </Card>
       )}
 
-      {locked && tab !== "requests" && (
+      {locked && tab !== "requests" && tab !== "approval" && (
         <p className="flex items-start gap-2 rounded-md border border-[#F5D77A] bg-[#FFF4D1] px-3 py-2 text-xs text-[#6B5000]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          PJP sudah dipublikasikan dan terkunci (Pengaturan "Kunci setelah publish"). Perubahan diajukan lewat tab Permintaan Perubahan dan diputuskan {settings.changeApprover === "spv" ? "SPV" : "SPV / BM"}.
+          {pendingLock
+            ? `PJP menunggu approval ${APPROVER_LABEL[settings.pjpApprover]} dan terkunci sampai diputuskan.`
+            : `PJP sudah dipublikasikan dan terkunci. Perubahan diajukan lewat tab Permintaan Perubahan (diputuskan ${settings.changeApprover === "spv" ? "SPV" : "SPV / BM"}); hasilnya menjadi versi Draft baru yang perlu approval ${APPROVER_LABEL[settings.pjpApprover]} sebelum publish.`}
         </p>
+      )}
+
+      {tab === "approval" && (
+        <Card>
+          <CardContent className="space-y-1 p-4 text-xs text-muted-foreground">
+            <p>
+              Alur: Draft → Menunggu Approval → Disetujui → Dipublikasikan. Penyetuju: <b>{APPROVER_LABEL[settings.pjpApprover]}</b> (permission <code className="font-mono">approve_pjp</code>, diatur di Pengaturan). Publish hanya untuk PJP Disetujui.
+            </p>
+          </CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">No.</TableHead>
+                <TableHead>Salesman</TableHead>
+                <TableHead>Versi</TableHead>
+                <TableHead>Diajukan</TableHead>
+                <TableHead>Entri</TableHead>
+                <TableHead>Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pendingPjps.map((h, i) => (
+                <TableRow key={h.salesId}>
+                  <TableCell>{i + 1}</TableCell>
+                  <TableCell>{salesOf(h.salesId).name}</TableCell>
+                  <TableCell>Versi {h.version}</TableCell>
+                  <TableCell className="text-xs">
+                    {h.submittedAt ? fmtDate(h.submittedAt) : "-"}
+                    <span className="block text-muted-foreground">{h.submittedBy}</span>
+                  </TableCell>
+                  <TableCell>{pjp.filter((e) => e.salesId === h.salesId).length} outlet</TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => { setSalesId(h.salesId); setTab("plan"); }}>
+                        Lihat PJP
+                      </Button>
+                      {canApprovePjp && (
+                        <>
+                          <Button size="sm" onClick={() => approvePjp(h.salesId)}>
+                            <Check /> Setujui
+                          </Button>
+                          <Button size="sm" variant="outline" className="text-[#DC3545] hover:bg-[#FAE5E7] hover:text-[#68121A]" onClick={() => setPjpDecision({ salesId: h.salesId, reason: "" })}>
+                            <X /> Tolak
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {pendingPjps.length === 0 && <p className="p-4 text-center text-sm text-muted-foreground">Tidak ada PJP yang menunggu approval</p>}
+        </Card>
       )}
 
       {tab === "requests" && (
@@ -806,7 +932,7 @@ export function PjpPage() {
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Batas publish: H-1 pukul {settings.publishCutoff} (bila belum dipublikasikan, job malam menerbitkan versi Disetujui terakhir). Pengingat call plan dikirim ke Mile Field pukul {settings.reminderTime}.
+              Batas publish: H-1 pukul {settings.publishCutoff} (bila belum dipublikasikan, job malam menerbitkan versi Disetujui terakhir; PJP yang belum Disetujui tidak diterbitkan). Pengingat call plan dikirim ke Mile Field pukul {settings.reminderTime}.
               {settings.lockAfterPublish ? " Setelah publish, perubahan oleh selain SPV lewat Permintaan Perubahan." : ""}
             </p>
             <p className="text-xs text-muted-foreground">Status PJP menjadi Dipublikasikan. Perubahan sesudahnya berlaku pada publish berikutnya (idempotent: tidak ada task ganda).</p>
@@ -817,6 +943,27 @@ export function PjpPage() {
             </Button>
             <Button onClick={publish}>
               <Send /> Publish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pjpDecision} onOpenChange={(o) => !o && setPjpDecision(null)}>
+        <DialogContent className="gap-0 p-0">
+          <DialogHeader>
+            <DialogTitle>Tolak PJP {pjpDecision ? salesOf(pjpDecision.salesId).name : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 p-4 text-sm">
+            <Label>Alasan penolakan (wajib)</Label>
+            <Textarea value={pjpDecision?.reason ?? ""} onChange={(e) => setPjpDecision((d) => (d ? { ...d, reason: e.target.value } : d))} />
+            <p className="text-xs text-muted-foreground">PJP kembali ke Draft; pembuat memperbaiki lalu mengajukan ulang.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPjpDecision(null)}>
+              Batal
+            </Button>
+            <Button disabled={!pjpDecision?.reason.trim()} onClick={rejectPjp}>
+              Tolak
             </Button>
           </DialogFooter>
         </DialogContent>

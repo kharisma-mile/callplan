@@ -30,6 +30,7 @@ const LABELS: Partial<Record<keyof Settings, string>> = {
   classFreq: "Frekuensi per kelas",
   belumBeliFreq: "Frekuensi Pelanggan Lama – belum beli",
   spvEditPjpDirect: "SPV edit PJP langsung",
+  pjpApprover: "Penyetuju PJP (sebelum publish)",
   pjpCallTarget: "Target call per hari",
   pjpMaxCalls: "Maksimum call per hari",
   hqCallTarget: "Target call per hari (HQ)",
@@ -551,7 +552,7 @@ export function SettingsPage() {
 
         <SettingsCard
           title="Publish, kunci & permintaan perubahan PJP"
-          keys={["publishCutoff", "lockAfterPublish", "spvEditPjpDirect", "changeApprover", "changeRequestSlaHours"]}
+          keys={["publishCutoff", "lockAfterPublish", "pjpApprover", "spvEditPjpDirect", "changeApprover", "changeRequestSlaHours"]}
         >
           {(d, set, ed) => (
             <>
@@ -563,7 +564,10 @@ export function SettingsPage() {
               <Row title="Kunci PJP setelah publish" hint="Perubahan sesudah publish lewat Permintaan Perubahan.">
                 <Switch checked={d.lockAfterPublish} disabled={!ed} onChange={(v) => set({ lockAfterPublish: v })} />
               </Row>
-              <Row title="SPV boleh mengubah PJP langsung" hint="SPV / Admin tetap bisa mengubah PJP terkunci (update_pjp); perubahan perlu publish ulang.">
+              <Row title="Penyetuju PJP sebelum publish" hint="Draft → Menunggu Approval → Disetujui → Dipublikasikan. Wajib approval sebelum publish. Default BM untuk PJP buatan SPV; Admin selalu dapat memutuskan. Permission approve_pjp.">
+                <Pick value={d.pjpApprover} disabled={!ed} onChange={(v) => set({ pjpApprover: v })} options={[["bm", "Branch Manager (default)"], ["spv", "Sales SPV"], ["regional", "Regional Manager (CD)"]]} w="w-[200px]" />
+              </Row>
+              <Row title="SPV boleh mengubah PJP langsung (bypass approval)" hint="Default MATI. Bila aktif, edit SPV / Admin langsung berstatus Disetujui tanpa approval dan PJP terbit boleh diubah (perlu publish ulang).">
                 <Switch checked={d.spvEditPjpDirect} disabled={!ed} onChange={(v) => set({ spvEditPjpDirect: v })} />
               </Row>
               <Row title="Penyetuju permintaan perubahan" hint="Permission update_pjp + cakupan tim / cabang.">

@@ -158,10 +158,15 @@ export interface PjpEntry {
 export interface PjpHeader {
   salesId: string;
   version: number;
-  status: "Draft" | "Disetujui" | "Dipublikasikan";
+  status: "Draft" | "Menunggu Approval" | "Disetujui" | "Dipublikasikan";
   validFrom: string;
   validTo?: string;
   publishedAt?: string;
+  submittedBy?: string;
+  submittedAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectReason?: string;
   note?: string;
 }
 
@@ -392,7 +397,10 @@ export interface Settings {
   /** Daily call plan push reminder (HH:MM). */
   reminderTime: string;
   belumBeliFreq: Frequency;
+  /** Bypass: SPV / Admin edit PJP langsung tanpa approval (default off). */
   spvEditPjpDirect: boolean;
+  /** Who approves a PJP before publish (permission approve_pjp). "regional" = Regional Manager (CD). */
+  pjpApprover: "bm" | "spv" | "regional";
 }
 
 export interface AuditLogEntry {

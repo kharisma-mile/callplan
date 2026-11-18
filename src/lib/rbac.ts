@@ -14,7 +14,7 @@ export interface ResourceDef {
 
 export const RESOURCES: ResourceDef[] = [
   { key: "dashboard", label: "Dashboard", group: "Umum", crud: ["view_any"], custom: [] },
-  { key: "pjp", label: "PJP / Call Plan", group: "Operasional", crud: [...CRUD], custom: ["publish_pjp"] },
+  { key: "pjp", label: "PJP / Call Plan", group: "Operasional", crud: [...CRUD], custom: ["approve_pjp", "publish_pjp"] },
   { key: "outlet", label: "Outlet / Pelanggan", group: "Operasional", crud: [...CRUD], custom: ["import_outlet", "export_outlet", "update_credit_limit"] },
   { key: "opportunity", label: "Pipeline", group: "Operasional", crud: [...CRUD], custom: [] },
   { key: "order", label: "Review Pesanan", group: "Operasional", crud: ["view_any", "view", "update"], custom: ["confirm_order"] },
@@ -85,7 +85,7 @@ export function defaultPermissions(): Record<string, string[]> {
     admin: allPermissions(),
     cd: [
       "view_any_dashboard",
-      ...p("pjp", VIEW),
+      ...p("pjp", VIEW), "approve_pjp",
       ...p("outlet", VIEW), "export_outlet",
       ...p("opportunity", VIEW),
       ...p("order", VIEW),
@@ -103,7 +103,7 @@ export function defaultPermissions(): Record<string, string[]> {
     ],
     bm: [
       "view_any_dashboard",
-      ...p("pjp", ["view_any", "view", "update"]), "publish_pjp",
+      ...p("pjp", ["view_any", "view", "update"]), "approve_pjp", "publish_pjp",
       ...p("outlet", ["view_any", "view", "create", "update"]), "export_outlet",
       ...p("opportunity", [...CRUD]),
       ...p("order", VIEW),
@@ -120,7 +120,7 @@ export function defaultPermissions(): Record<string, string[]> {
     ],
     spv: [
       "view_any_dashboard",
-      ...p("pjp", [...CRUD]), "publish_pjp",
+      ...p("pjp", [...CRUD]), "approve_pjp", "publish_pjp",
       ...p("outlet", ["view_any", "view", "create", "update"]),
       ...p("opportunity", [...CRUD]),
       ...p("order", VIEW),
