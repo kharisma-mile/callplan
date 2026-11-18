@@ -480,7 +480,7 @@ export function SettingsPage() {
                 <Row title="Generate: pertahankan rute / beat" hint="Outlet tetap di hari rutenya; hanya F1 / F2 yang boleh digeser ke hari tetangga.">
                   <Switch checked={d.generateKeepRoute} disabled={!ed} onChange={(v) => set({ generateKeepRoute: v })} />
                 </Row>
-                <Row title="Titik awal / akhir rute" hint="Dipakai peta rute dan urutan berdasarkan jarak.">
+                <Row title="Titik awal / akhir rute" hint="Dipakai saat generate otomatis dan estimasi jarak rute.">
                   <Pick value={d.routeStartPoint} disabled={!ed} onChange={(v) => set({ routeStartPoint: v })} options={[["branch", "Kantor cabang"], ["home", "Rumah salesman"]]} w="w-[180px]" />
                 </Row>
               </div>

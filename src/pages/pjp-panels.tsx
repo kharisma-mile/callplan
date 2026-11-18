@@ -1,4 +1,4 @@
-/* PJP page building blocks: shared helpers, load heatmap, route map, coverage, execution, generate and import dialogs. */
+/* PJP page building blocks: shared helpers, load heatmap, coverage, execution, generate and import dialogs. */
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, ExternalLink, FileSpreadsheet, MapPin, Navigation, Plus, Sparkles, Upload, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -102,113 +102,6 @@ export function LoadHeat({ matrix, settings, onPick, current, cycle = 0, branchI
         <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-[#FFF4D1]" /> di atas target</span>
         <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-[#FAE5E7]" /> &gt; maks {settings.pjpMaxCalls} / libur</span>
       </div>
-    </div>
-  );
-}
-
-/* ---------------- route map (SVG, dummy coordinates) ---------------- */
-const CLS_FILL = { A: "#01496A", B: "#6CD1FE", C: "#9E9E9E" } as const;
-export function MapPanel({ stops, branchId, settings, onResequence, title }: { stops: { e: PjpEntry; o: Outlet }[]; branchId: string; settings: Settings; onResequence?: (ids: string[]) => void; title: string }) {
-  const geo = BRANCH_GEO[branchId];
-  const office = { lat: geo.lat, lng: geo.lng };
-  const pts = stops.filter((s) => s.o.gps);
-  const W = 800;
-  const H = 440;
-  const all = [office, ...pts.map((s) => s.o.gps!)];
-  const minLat = Math.min(...all.map((p) => p.lat));
-  const maxLat = Math.max(...all.map((p) => p.lat));
-  const minLng = Math.min(...all.map((p) => p.lng));
-  const maxLng = Math.max(...all.map((p) => p.lng));
-  const span = Math.max(maxLat - minLat, maxLng - minLng, 0.01);
-  const xy = (p: { lat: number; lng: number }) => ({ x: 40 + ((p.lng - minLng) / span) * (W - 80), y: H - 30 - ((p.lat - minLat) / span) * (H - 60) });
-  const path = [office, ...pts.map((s) => s.o.gps!)];
-  const km = pathKm(path);
-  const mins = stops.reduce((a, x) => a + settings.classVisitMinutes[x.o.cls], 0) + (km / 25) * 60;
-  const resequence = () => {
-    const rest = [...pts];
-    const order: string[] = [];
-    let cur = office;
-    while (rest.length) {
-      let bi = 0;
-      rest.forEach((s, i) => {
-        if (haversineKm(cur, s.o.gps!) < haversineKm(cur, rest[bi].o.gps!)) bi = i;
-      });
-      const [n] = rest.splice(bi, 1);
-      order.push(n.e.id);
-      cur = n.o.gps!;
-    }
-    onResequence?.([...order, ...stops.filter((s) => !s.o.gps).map((s) => s.e.id)]);
-  };
-  return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
-          <p className="min-w-0 flex-1 text-sm font-semibold">{title}</p>
-          <Badge variant="info">{stops.length} kunjungan</Badge>
-          <Badge variant="neutral">± {km.toFixed(1)} km</Badge>
-          <Badge variant={capTone(stops.length, settings.pjpCallTarget, settings.pjpMaxCalls) === "over" ? "danger" : "neutral"}>± {fmtDur(mins)}</Badge>
-          {onResequence && pts.length > 2 && (
-            <Button size="sm" variant="outline" onClick={resequence} title="Urutan tetangga terdekat dari kantor cabang (bukan optimasi rute penuh)">
-              <Navigation /> Urutkan berdasarkan jarak
-            </Button>
-          )}
-        </div>
-        {stops.length === 0 ? (
-          <p className="p-10 text-center text-sm text-muted-foreground">Tidak ada kunjungan pada hari ini.</p>
-        ) : (
-          <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full bg-[#F4FAFD]" role="img" aria-label="Peta rute kunjungan">
-            {Array.from({ length: 9 }, (_, i) => (
-              <line key={`v${i}`} x1={(W / 8) * i} y1={0} x2={(W / 8) * i} y2={H} stroke="#E3EEF3" />
-            ))}
-            {Array.from({ length: 6 }, (_, i) => (
-              <line key={`h${i}`} x1={0} y1={(H / 5) * i} x2={W} y2={(H / 5) * i} stroke="#E3EEF3" />
-            ))}
-            <polyline points={path.map((p) => `${xy(p).x},${xy(p).y}`).join(" ")} fill="none" stroke="#02A8F3" strokeWidth={2.5} strokeDasharray="6 4" />
-            <g>
-              <rect x={xy(office).x - 13} y={xy(office).y - 13} width={26} height={26} rx={5} fill="#E45C20" />
-              <text x={xy(office).x} y={xy(office).y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">
-                K
-              </text>
-              <title>{settings.routeStartPoint === "branch" ? "Kantor cabang (titik awal)" : "Titik awal salesman"}</title>
-            </g>
-            {pts.map((s, i) => {
-              const p = xy(s.o.gps!);
-              return (
-                <g key={s.e.id}>
-                  <circle cx={p.x} cy={p.y} r={12} fill={CLS_FILL[s.o.cls]} stroke="#fff" strokeWidth={2} />
-                  <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill={s.o.cls === "B" ? "#002638" : "#fff"}>
-                    {i + 1}
-                  </text>
-                  <title>{`${i + 1}. ${s.o.name} · Kelas ${s.o.cls} · ${s.e.freq}`}</title>
-                </g>
-              );
-            })}
-          </svg>
-        )}
-        <p className="border-t px-4 py-2 text-[11px] text-muted-foreground">
-          Peta skematis dari koordinat GPS outlet (data dummy), tanpa layanan peta eksternal. K = {settings.routeStartPoint === "branch" ? "kantor cabang" : "titik awal salesman (rumah)"}. Estimasi durasi = durasi standar per kelas (A {settings.classVisitMinutes.A} / B {settings.classVisitMinutes.B} / C {settings.classVisitMinutes.C} menit) + perjalanan 25 km/jam.
-        </p>
-      </Card>
-      <Card>
-        <CardContent className="max-h-[520px] space-y-1 overflow-y-auto p-3 mile-scroll">
-          {stops.map((s, i) => {
-            const prev = i === 0 ? office : stops[i - 1].o.gps;
-            const d = prev && s.o.gps ? haversineKm(prev, s.o.gps) : null;
-            return (
-              <div key={s.e.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent font-semibold text-[#01496A]">{i + 1}</span>
-                <ClassBadge c={s.o.cls} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium" title={s.o.name}>{s.o.name}</p>
-                  <p className="truncate text-muted-foreground">{s.o.address}</p>
-                </div>
-                <span className="shrink-0 text-muted-foreground">{d === null ? <MapPin className="h-3.5 w-3.5 text-[#BF2130]" /> : `${d.toFixed(1)} km`}</span>
-              </div>
-            );
-          })}
-          {stops.some((s) => !s.o.gps) && <p className="px-2 pt-2 text-[11px] text-[#BF2130]">Outlet tanpa GPS tidak tampil di peta.</p>}
-        </CardContent>
-      </Card>
     </div>
   );
 }

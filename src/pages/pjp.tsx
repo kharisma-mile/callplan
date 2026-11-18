@@ -1,5 +1,5 @@
 import { useMemo, useState, type DragEvent } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CalendarOff, CalendarPlus, Check, Copy, Download, GripVertical, Plus, Send, Sparkles, Trash2, Undo2, Upload, UserRoundCog, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CalendarOff, CalendarPlus, Check, Copy, Download, GripVertical, MapPin, Plus, Send, Sparkles, Trash2, Undo2, Upload, UserRoundCog, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ import { FREQS, FREQ_META, callsPerCycle, daysFor, isHoliday, isOn, loadMatrix, 
 import type { Frequency, Outlet, PjpChangeRequest, PjpEntry } from "@/data/types";
 import { fmtDate, nowStamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { dayOff, withCapacity, CoveragePanel, DAY_SHORT, ExecutionPanel, GenerateDialog, ImportDialog, LoadHeat, MapPanel, TONE_CLS, capTone, dayEstimate, fmtDur, fmtShort, freqOf, plannedFor } from "./pjp-panels";
+import { dayOff, withCapacity, CoveragePanel, DAY_SHORT, ExecutionPanel, GenerateDialog, ImportDialog, LoadHeat, TONE_CLS, capTone, dayEstimate, fmtDur, fmtShort, freqOf, plannedFor } from "./pjp-panels";
 
 const CURRENT_WEEK = cyclePos(TODAY)?.week ?? 3;
 /** Default "Berlaku mulai": the next Monday after today. */
@@ -26,7 +26,7 @@ function nextMonday(iso: string) {
   return addDays(iso, d === 1 ? 7 : (8 - d) % 7 || 7);
 }
 const weekAlt = (e: Pick<PjpEntry, "freq" | "weeks">) => (e.freq === "F1" ? e.weeks[0] - 1 : e.freq === "F2" ? (e.weeks[0] === 1 ? 0 : 1) : 0);
-type Tab = "plan" | "map" | "coverage" | "exec" | "requests";
+type Tab = "plan" | "coverage" | "exec" | "requests";
 
 export function PjpPage() {
   const app = useApp();
@@ -35,7 +35,6 @@ export function PjpPage() {
   const [salesId, setSalesId] = useState(salesList[0]?.id ?? "");
   const [cycle, setCycle] = useState(0);
   const [week, setWeek] = useState<number | "all">(CURRENT_WEEK);
-  const [mapDay, setMapDay] = useState(cyclePos(TODAY)?.day ?? 0);
   const [tab, setTab] = useState<Tab>("plan");
   const [q, setQ] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -124,12 +123,6 @@ export function PjpPage() {
     const seqMap = new Map(dayList.map((x, k) => [x.id, k + 1]));
     setPjp((list) => list.map((x) => (seqMap.has(x.id) ? { ...x, seq: seqMap.get(x.id)! } : x)));
     markChanged([salesId]);
-  };
-  const resequence = (ids: string[]) => {
-    const seqMap = new Map(ids.map((x, k) => [x, k + 1]));
-    setPjp((list) => list.map((x) => (seqMap.has(x.id) ? { ...x, seq: seqMap.get(x.id)! } : x)));
-    markChanged([salesId]);
-    toast({ tone: "success", title: "Urutan rute diperbarui", desc: `${ids.length} kunjungan diurutkan berdasarkan jarak dari kantor cabang` });
   };
   const reassign = (id: string, toSales: string) => {
     const e = entries.find((x) => x.id === id);
@@ -307,6 +300,9 @@ export function PjpPage() {
         subtitle="Rencana kunjungan rotasi 4 minggu per salesman: rute (beat) per hari, banyak kunjungan per hari dalam urutan rute, frekuensi F1–F12. Follow-up prospek tampil sebagai extra call."
         action={
           <>
+            <Button variant="outline" onClick={() => toast({ tone: "info", title: "Peta rute tersedia di MileApp web (native)" })}>
+              <MapPin /> Lihat rute di MileApp
+            </Button>
             {canCreate && (
               <Button variant="outline" onClick={() => setImpOpen(true)}>
                 <Upload /> Import
@@ -338,7 +334,6 @@ export function PjpPage() {
         {(
           [
             ["plan", "Rencana PJP"],
-            ["map", "Peta Rute"],
             ["coverage", "Cakupan & Beban"],
             ["exec", "Eksekusi"],
             ["requests", `Permintaan Perubahan (${pendingReq})`],
@@ -384,7 +379,7 @@ export function PjpPage() {
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Minggu</Label>
                     <div className="flex gap-1 rounded-md bg-muted p-1">
-                      {(tab === "map" ? [1, 2, 3, 4] : (["all", 1, 2, 3, 4] as const)).map((w) => (
+                      {(["all", 1, 2, 3, 4] as const).map((w) => (
                         <button key={w} onClick={() => setWeek(w)} className={cn("h-[30px] rounded-sm px-3 text-sm font-medium", week === w ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
                           {w === "all" ? "Ringkas" : `M${w}`}
                         </button>
@@ -392,18 +387,6 @@ export function PjpPage() {
                     </div>
                   </div>
                 </>
-              )}
-              {tab === "map" && (
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Hari</Label>
-                  <div className="flex gap-1 rounded-md bg-muted p-1">
-                    {DAY_SHORT.map((d, i) => (
-                      <button key={d} onClick={() => setMapDay(i)} className={cn("h-[30px] rounded-sm px-2.5 text-sm font-medium", mapDay === i ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
-                        {d}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -505,17 +488,6 @@ export function PjpPage() {
           </Table>
           {requests.length === 0 && <p className="p-4 text-center text-sm text-muted-foreground">Tidak ada permintaan perubahan</p>}
         </Card>
-      )}
-
-      {tab === "map" && (
-        <MapPanel
-          key={`${salesId}-${week}-${mapDay}`}
-          title={`${DAYS[mapDay]}, ${fmtDate(cycleDate(week === "all" ? 1 : week, mapDay, cycle))} · ${s.name}`}
-          stops={cellInfo(week === "all" ? 1 : week, mapDay).active.map((e) => ({ e, o: outletMap.get(e.outletId)! })).filter((x) => x.o)}
-          branchId={s.branchId}
-          settings={settings}
-          onResequence={canUpdate ? resequence : undefined}
-        />
       )}
 
       {tab === "coverage" && <CoveragePanel salesId={salesId} onAdd={(o) => openAdd(o)} onPickSales={(id) => { setSalesId(id); setTab("plan"); }} />}
