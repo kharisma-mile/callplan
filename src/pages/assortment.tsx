@@ -254,7 +254,13 @@ function PerOutlet() {
               </Table>
               {eff.items.length === 0 && <EmptyState title="Tidak ada produk" desc="Atur assortment segmen × kelas atau tambahkan produk untuk outlet ini." />}
               <CardContent className="space-y-3 border-t p-4">
-                {canEdit && (
+                {!canEdit && (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground"><Info className="h-3.5 w-3.5" /> Mode lihat. Menambah / mengecualikan produk perlu permission <code>update_assortment</code> (default: Admin, Commercial Director).</p>
+                )}
+                {canEdit && notOffered.length === 0 && (
+                  <p className="flex items-center gap-1 text-xs text-[#6B5000]"><AlertTriangle className="h-3.5 w-3.5" /> Semua produk aktif sudah ada di katalog outlet ini{eff.fallback ? " karena segmen × kelasnya belum diatur (aturan cadangan: semua produk)" : ""}. {eff.fallback ? "Atur assortment segmen × kelas dulu, lalu tambahkan produk khusus bila perlu." : ""}</p>
+                )}
+                {canEdit && notOffered.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <Select value={addPid} onValueChange={setAddPid}>
                       <SelectTrigger className="w-[320px]"><SelectValue placeholder="Tambah produk khusus outlet ini" /></SelectTrigger>
