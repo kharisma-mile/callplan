@@ -18,6 +18,8 @@ import {
   UserPlus,
   Workflow,
   type LucideIcon,
+  Users2,
+  ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/store/app-store";
@@ -51,6 +53,7 @@ export function useNav(): NavItem[] {
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, perm: "view_any_dashboard", group: "Utama" },
     { key: "pjp", label: "PJP / Call Plan", icon: CalendarRange, perm: "view_any_pjp", group: "Sales Operations" },
     { key: "outlets", label: "Outlet / Pelanggan", icon: Store, perm: "view_any_outlet", group: "Sales Operations" },
+    { key: "plotting", label: "Plotting Pelanggan", icon: Users2, perm: "view_any_outlet_assignment", group: "Sales Operations" },
     { key: "pipeline", label: "Pipeline", icon: GitBranch, perm: "view_any_opportunity", group: "Sales Operations" },
     { key: "orders", label: "Review Pesanan", icon: PackageCheck, perm: "view_any_order", group: "Sales Operations" },
     { key: "targets", label: "Target", icon: Target, perm: "view_any_target", group: "Sales Operations" },
@@ -65,6 +68,7 @@ export function useNav(): NavItem[] {
   items.push(
     { key: "reports", label: "Laporan", icon: BarChart3, perm: REPORT_PERMS, group: "Laporan" },
     { key: "products", label: "Produk & Price List", icon: Boxes, perm: ["view_any_product", "view_any_price_list"], group: "Master Data" },
+    { key: "assortment", label: "Assortment Produk", icon: ListChecks, perm: "view_any_assortment", group: "Master Data" },
     { key: "territory", label: "Territory & Tim Sales", icon: MapPinned, perm: ["view_any_branch", "view_any_region", "view_any_route", "view_any_sales_team"], group: "Master Data" },
     {
       key: "data",

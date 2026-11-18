@@ -17,6 +17,8 @@ import { SettingsPage } from "@/pages/settings";
 import { ProductsPage } from "@/pages/products";
 import { TerritoryPage } from "@/pages/territory";
 import { ReportsPage } from "@/pages/reports";
+import { PlottingPage } from "@/pages/plotting";
+import { AssortmentPage } from "@/pages/assortment";
 import { NoAccess } from "@/components/empty-state";
 import type { ApprovalType } from "@/data/types";
 
@@ -65,6 +67,8 @@ function Shell() {
         products: <ProductsPage />,
         territory: <TerritoryPage />,
         reports: <ReportsPage />,
+        plotting: <PlottingPage />,
+        assortment: <AssortmentPage />,
       }[route] ?? <DashboardPage onNavigate={navigate} />;
 
   return (

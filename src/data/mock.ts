@@ -1,4 +1,7 @@
 import type {
+  Assortment,
+  AssortmentException,
+  OwnershipLog,
   ApprovalRequest,
   Branch,
   CustomerStatus,
@@ -495,6 +498,8 @@ export const DEFAULT_SETTINGS: Settings = {
     { role: "bm", label: "Branch Manager", max: 10 },
     { role: "cd", label: "Commercial Director", max: null },
   ],
+  assortmentFallback: "all",
+  odooWriteBackSalesperson: false,
 };
 
 /* ---------- targets & activity ---------- */
@@ -663,3 +668,24 @@ export const PJP_REQUESTS: PjpChangeRequest[] = (() => {
     { id: "PCR3", salesId: team[0].id, outletId: e3.outletId, kind: "Hapus", detail: "Keluar dari PJP mulai minggu depan", reason: "Toko tutup permanen", requestedBy: team[0].name, at: "2026-11-14 10:20", status: "approved", decidedBy: "Dewi Lestari", decisionReason: "Sudah dicek" },
   ];
 })();
+
+/* ---------- assortment per segment x class (module 02) ---------- */
+export const SEGMENT_LIST = ["Grosir Plastik", "Toko Kemasan", "Industri F&B", "Horeka", "Agen / Sub-distributor", "Toko Kelontong"];
+const A_ = (segment: string, cls: "A" | "B" | "C", items: [string, boolean][]): Assortment => ({ id: `AS-${segment.slice(0, 3)}-${cls}`.replace(/\s/g, ""), segment, cls, items: items.map(([productId, mustSell]) => ({ productId, mustSell })), updatedBy: "Admin Sistem", updatedAt: "2026-11-10 09:00" });
+export const ASSORTMENTS: Assortment[] = [
+  A_("Grosir Plastik", "A", [["P01", true], ["P02", true], ["P06", true], ["P11", false], ["P12", false], ["P07", false], ["P03", false]]),
+  A_("Grosir Plastik", "B", [["P01", true], ["P02", true], ["P11", false], ["P07", false]]),
+  A_("Grosir Plastik", "C", [["P01", true], ["P02", false], ["P07", false]]),
+  A_("Toko Kemasan", "A", [["P03", true], ["P04", true], ["P08", true], ["P09", false], ["P01", false], ["P06", false]]),
+  A_("Toko Kemasan", "B", [["P03", true], ["P04", true], ["P09", false], ["P08", false]]),
+  A_("Toko Kemasan", "C", [["P03", true], ["P04", false], ["P09", false]]),
+  A_("Industri F&B", "A", [["P05", true], ["P12", true], ["P06", false], ["P10", false], ["P08", false]]),
+  A_("Industri F&B", "B", [["P05", true], ["P12", false], ["P06", false]]),
+  A_("Horeka", "A", [["P04", true], ["P03", true], ["P09", false], ["P08", false]]),
+  A_("Horeka", "B", [["P04", true], ["P03", false], ["P09", false]]),
+  A_("Agen / Sub-distributor", "A", [["P01", true], ["P02", true], ["P03", true], ["P04", false], ["P11", false], ["P12", false]]),
+  A_("Toko Kelontong", "B", [["P01", true], ["P07", false], ["P09", false]]),
+  A_("Toko Kelontong", "C", [["P01", true], ["P07", false]]),
+];
+export const ASSORTMENT_EXCEPTIONS: AssortmentException[] = [];
+export const OWNERSHIP_LOG: OwnershipLog[] = [];

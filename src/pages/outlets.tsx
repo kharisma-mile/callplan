@@ -558,7 +558,7 @@ export function OutletsPage() {
                 </div>
                 <div className="space-y-1">
                   <Label>Sales</Label>
-                  <Select value={edit.salesId} onValueChange={(v) => setEdit({ ...edit, salesId: v, routeId: undefined })}>
+                  <Select value={edit.salesId} disabled={outlets.some((o) => o.id === edit.id)} onValueChange={(v) => setEdit({ ...edit, salesId: v, routeId: undefined })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -570,6 +570,7 @@ export function OutletsPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {outlets.some((o) => o.id === edit.id) && <p className="text-xs text-muted-foreground">Ubah pemilik lewat menu Plotting Pelanggan (PJP &amp; pipeline ikut pindah, tercatat di riwayat).</p>}
                 </div>
                 <div className="space-y-1">
                   <Label>Rute / territory</Label>

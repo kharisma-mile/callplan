@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 type Keys = (keyof Settings)[];
 
 const LABELS: Partial<Record<keyof Settings, string>> = {
+  assortmentFallback: "Cadangan assortment",
+  odooWriteBackSalesperson: "Tulis balik salesperson ke Odoo",
   pipelineStageApproval: "Approval SPV per tahap pipeline",
   pipelineBatalApproval: "Approval Batal pipeline oleh SPV",
   existingCustomerPipeline: "Pipeline pelanggan lama",
@@ -276,6 +278,23 @@ export function SettingsPage() {
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <SettingsCard
+          title="Plotting pelanggan & assortment"
+          keys={["assortmentFallback", "odooWriteBackSalesperson"]}
+        >
+          {(d, set, ed) => (
+            <>
+              <Row title="Segmen × kelas tanpa assortment" hint="Katalog Mile Field untuk outlet yang segmen × kelasnya belum diatur di Assortment Produk.">
+                <Pick value={d.assortmentFallback} disabled={!ed} onChange={(v) => set({ assortmentFallback: v })} options={[["all", "Semua produk aktif"], ["none", "Tidak ada produk"]]} />
+              </Row>
+              {d.variant === "A" && (
+                <Row title="Tulis balik pemilik outlet ke Odoo" hint="Varian A. Plotting dikelola di modul; jika aktif, salesman pemilik ditulis ke res.partner.user_id di Odoo. Default mati.">
+                  <Switch checked={d.odooWriteBackSalesperson} disabled={!ed} onChange={(v) => set({ odooWriteBackSalesperson: v })} />
+                </Row>
+              )}
+            </>
+          )}
+        </SettingsCard>
         <SettingsCard
           title="Pipeline & approval"
           keys={["pipelineBatalApproval", "pipelineStageApproval", "existingCustomerPipeline", "overdueDays"]}

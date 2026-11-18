@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import * as M from "@/data/mock";
 import type {
+  Assortment,
+  AssortmentException,
+  OwnershipLog,
   ApprovalRequest,
   ApprovalType,
   AuditEntry,
@@ -32,6 +35,7 @@ import type {
 import { APPROVAL_META, ROLE_META, ROLE_ORDER, defaultPermissions } from "@/lib/rbac";
 import { buildSteps, checkOrder, orderTotal } from "@/lib/approval";
 import { nowStamp, rupiah } from "@/lib/format";
+import { daysFor, weeksFor } from "@/data/pjp-engine";
 
 const PREFIX: Record<ApprovalType, string> = {
   discount: "APV-DSK",
@@ -335,6 +339,17 @@ export interface AppState {
   syncErrors: SyncError[];
   importLogs: ImportLog[];
   toasts: Toast[];
+  assortments: Assortment[];
+  assortmentExceptions: AssortmentException[];
+  ownershipLog: OwnershipLog[];
+}
+
+export interface ReassignInput {
+  outletIds: string[];
+  toSalesId: string;
+  toRouteId?: string;
+  effective: string;
+  reason: string;
 }
 
 interface Actions {
@@ -377,6 +392,12 @@ interface Actions {
   decideApproval: (id: string, approve: boolean, reason: string, extra?: { nooCredit?: ApprovalRequest["nooCredit"] }) => void;
   canActOnStep: (a: ApprovalRequest) => boolean;
   moveOpp: (oppId: string, stage: OppStage, batalReason?: string) => void;
+  setAssortments: (fn: (a: Assortment[]) => Assortment[]) => void;
+  setAssortmentExceptions: (fn: (a: AssortmentException[]) => AssortmentException[]) => void;
+  /** Module 03 plotting: move outlets to another salesman (PJP entries move as Draft, open pipeline follows). */
+  reassignOutlets: (inp: ReassignInput) => { moved: number; pjpMoved: number; oppsMoved: number };
+  /** Module 02: products offered to an outlet (segment x class assortment + exceptions). */
+  assortmentFor: (outlet: Outlet) => { items: { productId: string; mustSell: boolean; source: "assortment" | "include" | "fallback" }[]; fallback: boolean };
 }
 
 const Ctx = createContext<(AppState & Actions) | null>(null);
@@ -435,6 +456,9 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
     { at: "2026-11-14 10:03", by: "Rina Kusuma", module: "Pengaturan", action: "Pengaturan disimpan", target: "Tier LOA diskon", detail: "Branch Manager 8% → 10%" },
   ]);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [assortments, setAssortments] = useState<Assortment[]>(M.ASSORTMENTS);
+  const [assortmentExceptions, setAssortmentExceptions] = useState<AssortmentException[]>(M.ASSORTMENT_EXCEPTIONS);
+  const [ownershipLog, setOwnershipLog] = useState<OwnershipLog[]>(M.OWNERSHIP_LOG);
 
   const user = session ? users.find((u) => u.id === session.userId) ?? null : null;
 
@@ -788,6 +812,60 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
     [createApproval, toast]
   );
 
+  const reassignOutlets = (inp: ReassignInput) => {
+    const ids = new Set(inp.outletIds);
+    const target = salesOf(inp.toSalesId);
+    const route = inp.toRouteId ? routes.find((r) => r.id === inp.toRouteId) : undefined;
+    const moving = outlets.filter((o) => ids.has(o.id) && (o.salesId !== inp.toSalesId || (!!inp.toRouteId && o.routeId !== inp.toRouteId)));
+    const movingIds = new Set(moving.map((o) => o.id));
+    const by = user?.name ?? "Sistem";
+    const at = nowStamp();
+    // 1) owner + route (+ branch when moved across branches)
+    setOutlets((list) => list.map((o) => (movingIds.has(o.id) ? { ...o, salesId: inp.toSalesId, branchId: target.branchId, routeId: inp.toRouteId ?? (o.salesId === inp.toSalesId ? o.routeId : undefined) } : o)));
+    // 2) PJP: remove from the old owner, add to the target as Draft entries
+    setPjp((list) => {
+      const old = list.filter((e) => movingIds.has(e.outletId));
+      const keep = list.filter((e) => !movingIds.has(e.outletId));
+      const maxSeq = (day: number) => Math.max(0, ...keep.filter((e) => e.salesId === inp.toSalesId && e.days.includes(day)).map((e) => e.seq));
+      const added = moving.map((o, i) => {
+        const prev = old.find((e) => e.outletId === o.id);
+        const freq = prev?.freq ?? o.visitFreq ?? settings.classFreq[o.cls];
+        const day = route?.day ?? prev?.days[0] ?? 0;
+        return { id: `PJ-R${Date.now()}-${i}`, salesId: inp.toSalesId, outletId: o.id, routeId: inp.toRouteId, days: daysFor(freq, day), freq, weeks: prev?.weeks ?? weeksFor(freq, i), seq: maxSeq(day) + 1 + i, validFrom: inp.effective };
+      });
+      return [...keep, ...added];
+    });
+    setPjpHeaders((hs) => hs.map((h) => (h.salesId === inp.toSalesId && moving.length ? { ...h, status: "Draft", version: h.version + (h.status === "Draft" ? 0 : 1), note: `Ada ${moving.length} outlet hasil plotting (${at}); perlu approval & publikasi ulang.` } : h)));
+    // 3) open pipeline follows the outlet
+    const oppsMoved = opps.filter((op) => op.outletId && movingIds.has(op.outletId) && op.stage !== "Menang" && op.stage !== "Batal" && op.salesId !== inp.toSalesId).length;
+    setOpps((list) => list.map((op) => {
+      if (op.outletId && movingIds.has(op.outletId) && op.stage !== "Menang" && op.stage !== "Batal" && op.salesId !== inp.toSalesId) { return { ...op, salesId: inp.toSalesId, log: [...op.log, { at, by, text: `Pindah ke ${target.name} (plotting pelanggan)` }] }; }
+      return op;
+    }));
+    // 4) history + audit
+    setOwnershipLog((l) => [
+      ...moving.map((o, i) => ({ id: `OWN-${Date.now()}-${i}`, outletId: o.id, fromSalesId: o.salesId, toSalesId: inp.toSalesId, fromRouteId: o.routeId, toRouteId: inp.toRouteId, effective: inp.effective, reason: inp.reason, by, at })),
+      ...l,
+    ]);
+    if (moving.length) addAudit({ module: "Plotting Pelanggan", action: "Pindah outlet", target: `${moving.length} outlet → ${target.name}`, detail: `${route ? `Rute ${route.name} · ` : ""}efektif ${inp.effective} · ${inp.reason}` });
+    return { moved: moving.length, pjpMoved: moving.length, oppsMoved };
+  };
+
+  const assortmentFor = (o: Outlet) => {
+    const base = assortments.find((a) => a.segment === o.segment && a.cls === o.cls);
+    const ex = assortmentExceptions.filter((e) => e.outletId === o.id);
+    const excluded = new Set(ex.filter((e) => e.kind === "exclude").map((e) => e.productId));
+    const fallback = !base;
+    const baseItems: { productId: string; mustSell: boolean; source: "assortment" | "include" | "fallback" }[] = base
+      ? base.items.map((i) => ({ ...i, source: "assortment" as const }))
+      : settings.assortmentFallback === "all" ? products.filter((p) => p.active !== false).map((p) => ({ productId: p.id, mustSell: false, source: "fallback" as const })) : [];
+    const items = [
+      ...baseItems.filter((i) => !excluded.has(i.productId)),
+      ...ex.filter((e) => e.kind === "include" && !baseItems.some((i) => i.productId === e.productId)).map((e) => ({ productId: e.productId, mustSell: !!e.mustSell, source: "include" as const })),
+    ];
+    return { items, fallback };
+  };
+
   const value: AppState & Actions = {
     session,
     user,
@@ -815,6 +893,13 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
     pjpRequests,
     targetLog,
     auditLog,
+    assortments,
+    assortmentExceptions,
+    ownershipLog,
+    setAssortments,
+    setAssortmentExceptions,
+    reassignOutlets,
+    assortmentFor,
     login: (userId) => {
       const u = users.find((x) => x.id === userId);
       if (u && u.role) setSession({ userId, role: u.role });

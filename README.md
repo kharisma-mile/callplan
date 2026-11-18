@@ -7,6 +7,7 @@ Interactive **frontend-only** mockup for the Unggul Plastik pre-sales demo. It s
 - Both solution variants are in one app. Switch them in **Pengaturan** (labelled *Mode demo — di produksi varian ditetapkan saat deployment*):
   - **Varian A (Integrasi Odoo):** the Data page becomes *Sinkronisasi Odoo*. Odoo-owned outlet fields are read-only (badge "Odoo"). Confirmed orders are sent to Odoo as a draft Sales Order (simulated), then read back (*Dikonfirmasi di Odoo*).
   - **Varian B (Standalone):** the Data page becomes *Import / Export Excel*. Order status is managed in the module: *Dikonfirmasi → Diproses → Selesai*, or *Dibatalkan* (delivery is out of scope).
+- **Setup flow (D-46):** Dashboard card *Alur Setup Sales Operations* shows the order of work with live status: 1 Territory & Tim Sales → 2 **Plotting Pelanggan** (outlet → salesman owner + route; bulk move puts the outlets into the target salesman's PJP as Draft, open pipeline follows, ownership history) → 3 Produk, Price List & **Assortment Produk** (products per segment × class, must-sell flags, per-outlet exceptions; feeds the Mile Field order catalog) → 4 PJP (generate → approval → publish) → 5 visit tasks in Mile Field.
 - Behaviour follows the module PRDs in `prd/modules/` (each module's Lampiran A lists what was validated against this mockup).
 
 ## Stack
@@ -34,7 +35,7 @@ src/
                           (≈70–120 per salesman, ~40–60 at HQ), 366 routes / beats, ~5,400 PJP
                           entries, holidays, regions, price lists, PJP change requests)
   data/pjp-engine.ts      PJP logic: F1–F12 patterns, auto-generate + balancing, simulated execution
-  pages/                  login, dashboard, pjp, outlets, pipeline, approvals, orders,
+  pages/                  login, dashboard, pjp, outlets, plotting, assortment, pipeline, approvals, orders,
                           targets, reports, products (product & price list),
                           territory (branch / region / route / sales team),
                           data (Odoo sync / Excel), users (users, roles, permission, audit), settings

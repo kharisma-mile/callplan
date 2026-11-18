@@ -401,6 +401,10 @@ export interface Settings {
   spvEditPjpDirect: boolean;
   /** Who approves a PJP before publish (permission approve_pjp). "regional" = Regional Manager (CD). */
   pjpApprover: "bm" | "spv" | "regional";
+  /** Module 02 assortment: segment x class without assortment offers all active products ("all") or nothing ("none"). */
+  assortmentFallback: "all" | "none";
+  /** Module 03 plotting, Varian A: write the outlet owner back to Odoo (res.partner.user_id). */
+  odooWriteBackSalesperson: boolean;
 }
 
 export interface AuditLogEntry {
@@ -448,4 +452,40 @@ export interface Toast {
   title: string;
   desc?: string;
   tone?: "success" | "info" | "warning" | "danger";
+}
+
+/** Module 02: products offered per segment (channel) x outlet class; mustSell = checked on every visit / order. */
+export interface AssortmentItem {
+  productId: string;
+  mustSell: boolean;
+}
+export interface Assortment {
+  id: string;
+  segment: string;
+  cls: OutletClass;
+  items: AssortmentItem[];
+  updatedBy?: string;
+  updatedAt?: string;
+}
+/** Per-outlet exception on top of the segment x class assortment (key accounts). */
+export interface AssortmentException {
+  id: string;
+  outletId: string;
+  productId: string;
+  kind: "include" | "exclude";
+  mustSell?: boolean;
+}
+
+/** Module 03: outlet ownership change (plotting) history. */
+export interface OwnershipLog {
+  id: string;
+  outletId: string;
+  fromSalesId?: string;
+  toSalesId: string;
+  fromRouteId?: string;
+  toRouteId?: string;
+  effective: string;
+  reason: string;
+  by: string;
+  at: string;
 }

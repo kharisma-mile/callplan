@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { AlarmClock, ClipboardCheck, PackageCheck, Footprints, GitBranch, Target, Zap } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { SetupGuide } from "@/components/setup-guide";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +86,8 @@ export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void 
         subtitle={`${scopeLabel} · ${fmtMonth(CURRENT_MONTH)} · data per ${fmtDate(TODAY)}`}
         action={<Badge variant="neutral">{scopeSalesIds.length} salesman dalam cakupan</Badge>}
       />
+
+      <SetupGuide onNavigate={onNavigate} />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <StatCard icon={Target} label="Target vs Aktual" value={`${pct(data.actual, data.target)}%`} hint={`${rupiahShort(data.actual)} dari ${rupiahShort(data.target)}`} />
