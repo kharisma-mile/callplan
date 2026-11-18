@@ -58,9 +58,9 @@ export function ProductsPage() {
           <Database className="h-4 w-4" /> Data dikelola di Odoo · sinkron terakhir 17 Nov 2026 10:00. Perubahan dilakukan di Odoo (Varian A).
         </div>
       )}
-      <div className="flex w-fit gap-1 rounded-md bg-muted p-1">
+      <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-muted p-1">
         {tabs.map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
+          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
             {l}
           </button>
         ))}

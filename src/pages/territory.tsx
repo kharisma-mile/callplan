@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -74,9 +74,9 @@ export function TerritoryPage() {
         title="Territory & Tim Sales"
         subtitle="Cabang (hub MileApp), region, rute / territory dan struktur SPV → salesman. Menjadi dasar cakupan data, PJP dan nomor dokumen (SO-<cabang>-…, C-<cabang>-…)."
       />
-      <div className="flex w-fit gap-1 rounded-md bg-muted p-1">
+      <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-muted p-1">
         {tabs.map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
+          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
             {l}
           </button>
         ))}
@@ -346,6 +346,11 @@ function RouteTab() {
   const [del, setDel] = useState<Route | null>(null);
   const rows = routes.filter((r) => visible.includes(r.branchId) && (branchF === "all" || r.branchId === branchF));
   const bName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
+  const outletCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const o of outlets) if (o.routeId) m.set(o.routeId, (m.get(o.routeId) ?? 0) + 1);
+    return m;
+  }, [outlets]);
 
   return (
     <Card>
@@ -396,7 +401,7 @@ function RouteTab() {
               </TableCell>
               <TableCell>{bName(r.branchId)}</TableCell>
               <TableCell>{SALESMEN.find((s) => s.id === r.salesId)?.name ?? "—"}</TableCell>
-              <TableCell className="text-right">{outlets.filter((o) => o.routeId === r.id).length}</TableCell>
+              <TableCell className="text-right">{outletCount.get(r.id) ?? 0}</TableCell>
               <TableCell>{r.active ? <Badge variant="success">Aktif</Badge> : <Badge variant="neutral">Nonaktif</Badge>}</TableCell>
               <TableCell>
                 {(can("update_route") || can("delete_route")) && (

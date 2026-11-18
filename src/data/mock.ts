@@ -23,7 +23,11 @@ import type {
   SyncError,
   TargetRow,
   FollowKind,
+  Holiday,
+  PjpHeader,
+  Frequency,
 } from "./types";
+import { generatePjp, isOn, simulateDay, validOn } from "./pjp-engine";
 
 /* ---------- deterministic RNG so the demo is identical every load ---------- */
 let seed = 20261117;
@@ -40,23 +44,33 @@ export const CURRENT_MONTH = "2026-11";
 export const CYCLE_START = "2026-11-02";
 export const DAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
+/** Date math in UTC so the result does not depend on the browser time zone (WIB = UTC+7). */
 export function addDays(iso: string, n: number) {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() + n);
+  const d = new Date(iso.slice(0, 10) + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
-/** Map an ISO date to {week 1..4, day 0..5} of the current rotation, or null. */
-export function cyclePos(iso: string): { week: number; day: number } | null {
-  const start = new Date(CYCLE_START + "T00:00:00").getTime();
-  const t = new Date(iso + "T00:00:00").getTime();
+/** Map an ISO date to {week 1..4, day 0..5} of rotation `cycle` (0 = current, 1 = next), or null. */
+export function cyclePos(iso: string, cycle = 0): { week: number; day: number } | null {
+  const start = new Date(cycleStart(cycle) + "T00:00:00Z").getTime();
+  const t = new Date(iso.slice(0, 10) + "T00:00:00Z").getTime();
   const diff = Math.round((t - start) / 86400000);
   if (diff < 0 || diff >= 28) return null;
   const day = diff % 7;
   if (day > 5) return null;
   return { week: Math.floor(diff / 7) + 1, day };
 }
-export function cycleDate(week: number, day: number) {
-  return addDays(CYCLE_START, (week - 1) * 7 + day);
+export function cycleStart(cycle = 0) {
+  return addDays(CYCLE_START, cycle * 28);
+}
+export function cycleDate(week: number, day: number, cycle = 0) {
+  return addDays(cycleStart(cycle), (week - 1) * 7 + day);
+}
+/** Previous working day (Mon-Sat) of an ISO date. */
+export function prevWorkday(iso: string) {
+  let d = addDays(iso, -1);
+  if (new Date(d + "T00:00:00Z").getUTCDay() === 0) d = addDays(d, -1);
+  return d;
 }
 
 /* ---------- org ---------- */
@@ -135,27 +149,79 @@ const OUTLET_NAMES = ["Sinar Jaya", "Makmur Abadi", "Sumber Rejeki", "Berkah Pla
 const SEGMENTS = ["Grosir Plastik", "Toko Kemasan", "Industri F&B", "Horeka", "Agen / Sub-distributor", "Toko Kelontong"];
 const STREETS = ["Jl. Raya", "Jl. Pasar", "Jl. Industri", "Jl. Merdeka", "Jl. Pahlawan", "Jl. Diponegoro", "Jl. Ahmad Yani", "Jl. Gatot Subroto"];
 
+/* ---------- routes / beats (module 03 + 04): 6 beats per salesman, one per weekday ---------- */
+const CITY_GEO: Record<string, { lat: number; lng: number; areas: string[] }> = {
+  JKT: { lat: -6.168, lng: 106.79, areas: ["Grogol", "Kebon Jeruk", "Cengkareng", "Kalideres", "Tambora", "Taman Sari", "Palmerah", "Kembangan", "Pluit", "Tanjung Duren"] },
+  TGR: { lat: -6.178, lng: 106.63, areas: ["Cikokol", "Karawaci", "Cipondoh", "Batuceper", "Jatiuwung", "Periuk", "Ciledug", "Serpong", "Cikupa", "Balaraja"] },
+  BDG: { lat: -6.914, lng: 107.61, areas: ["Cibadak", "Kopo", "Astana Anyar", "Cicadas", "Antapani", "Buah Batu", "Sukajadi", "Cimahi", "Gedebage", "Soreang"] },
+  SMG: { lat: -6.99, lng: 110.42, areas: ["Johar", "Kaligawe", "Genuk", "Tugu", "Banyumanik", "Pedurungan", "Ngaliyan", "Candisari", "Mranggen", "Ungaran"] },
+  SBY: { lat: -7.257, lng: 112.75, areas: ["Rungkut", "Kenjeran", "Tandes", "Wonokromo", "Gubeng", "Pabean", "Sukolilo", "Benowo", "Waru", "Sidoarjo Kota"] },
+  MDN: { lat: 3.595, lng: 98.672, areas: ["Medan Kota", "Belawan", "Amplas", "Helvetia", "Sunggal", "Tembung", "Marelan", "Petisah", "Deli Tua", "Binjai"] },
+  PLG: { lat: -2.976, lng: 104.775, areas: ["Ilir Barat", "Ilir Timur", "Seberang Ulu", "Kertapati", "Sako", "Plaju", "Kalidoni", "Sukarami", "Gandus", "Banyuasin"] },
+  MKS: { lat: -5.147, lng: 119.432, areas: ["Panakkukang", "Tallo", "Biringkanaya", "Tamalate", "Rappocini", "Mariso", "Ujung Tanah", "Manggala", "Gowa", "Maros"] },
+  DPS: { lat: -8.65, lng: 115.216, areas: ["Denpasar Barat", "Denpasar Timur", "Kuta", "Sanur", "Ubung", "Gianyar", "Mengwi", "Jimbaran", "Tabanan", "Kerobokan"] },
+  HQ: { lat: -6.21, lng: 106.82, areas: ["Pulogadung", "Cikarang", "Bekasi", "Cibitung", "Karawang", "Sunter", "Marunda", "Cakung", "Bogor", "Depok"] },
+};
+export const BRANCH_GEO = CITY_GEO;
+const AREA_TYPES = ["Pusat Kota", "Pasar & Pergudangan", "Kawasan Industri"];
+export const ROUTES: Route[] = [];
+SALESMEN.forEach((s) => {
+  const idx = Number(s.id.slice(-2)) - 1;
+  const geo = CITY_GEO[s.branchId];
+  for (let d = 0; d < 6; d++) {
+    const area = geo.areas[(idx * 3 + d) % geo.areas.length];
+    ROUTES.push({
+      id: `R-${s.code}-${d + 1}`,
+      code: `${s.code}-R${d + 1}`,
+      name: `Rute ${DAYS[d]} – ${area}`,
+      branchId: s.branchId,
+      salesId: s.id,
+      area: `${area} · ${AREA_TYPES[(idx + d) % 3]}`,
+      active: true,
+      day: d,
+    });
+  }
+});
+
+/* ---------- outlets: ~60-120 per salesman, grouped in beats with a route sequence ---------- */
 export const OUTLETS: Outlet[] = [];
 let outletSeq = 1;
 for (const s of SALESMEN) {
   const b = BRANCHES.find((x) => x.id === s.branchId)!;
-  const count = s.branchId === "SBY" ? 7 : 5;
+  const idx = Number(s.id.slice(-2)) - 1;
+  const geo = CITY_GEO[s.branchId];
+  const isHQ = s.branchId === "HQ";
+  const count = isHQ ? between(40, 60) : between(72, 122);
+  // beat cluster centre + travel direction per weekday
+  const beats = [0, 1, 2, 3, 4, 5].map((d) => {
+    const ang = ((idx * 6 + d) / 42) * Math.PI * 2 + rnd() * 0.4;
+    const rad = 0.025 + rnd() * 0.05;
+    const dir = rnd() * Math.PI * 2;
+    return { lat: geo.lat + Math.sin(ang) * rad, lng: geo.lng + Math.cos(ang) * rad, dir, n: 0 };
+  });
   for (let i = 0; i < count; i++) {
-    const cls: OutletClass = i < 2 ? "A" : i < 4 ? "B" : "C";
+    const r0 = rnd();
+    const cls: OutletClass = isHQ ? (r0 < 0.5 ? "A" : r0 < 0.85 ? "B" : "C") : r0 < 0.36 ? "A" : r0 < 0.76 ? "B" : "C";
     const r = rnd();
-    const status: CustomerStatus = r < 0.12 ? "baru" : r < 0.82 ? "lama_beli" : "lama_belum";
+    const status: CustomerStatus = r < 0.06 ? "baru" : r < 0.86 ? "lama_beli" : "lama_belum";
+    const visitFreq: Frequency | undefined = cls === "A" && status === "lama_beli" ? (rnd() < 0.04 ? "F12" : rnd() < (isHQ ? 0.45 : 0.25) ? "F8" : undefined) : undefined;
     const creditLimit = status === "baru" ? 0 : cls === "A" ? between(15, 40) * 10_000_000 : cls === "B" ? between(5, 15) * 10_000_000 : between(1, 5) * 10_000_000;
     const outstanding = status === "lama_beli" ? Math.round(creditLimit * (0.2 + rnd() * 0.75)) : 0;
     const hasOverdue = outstanding > 0 && rnd() < 0.3;
     const overdueDays = hasOverdue ? between(5, 52) : 0;
     const code = `C-${s.branchId}-${String(outletSeq).padStart(4, "0")}`;
+    const d = i % 6;
+    const beat = beats[d];
+    beat.n++;
+    const step = 0.0035 * beat.n;
+    const jitter = (rnd() - 0.5) * 0.004;
     OUTLETS.push({
       id: `O${outletSeq}`,
       code,
-      name: `${pick(PREFIX)} ${pick(OUTLET_NAMES)}${rnd() < 0.3 ? " " + b.city.split(" ")[0] : ""}`,
+      name: `${pick(PREFIX)} ${pick(OUTLET_NAMES)}${rnd() < 0.3 ? " " + geo.areas[(idx * 3 + d) % geo.areas.length] : ""}`,
       owner: `${pick(FIRST)} ${pick(LAST)}`,
       phone: `08${between(11, 59)}-${between(1000, 9999)}-${between(1000, 9999)}`,
-      address: `${pick(STREETS)} No. ${between(1, 250)}`,
+      address: `${pick(STREETS)} No. ${between(1, 250)}, ${geo.areas[(idx * 3 + d) % geo.areas.length]}`,
       city: b.city,
       branchId: s.branchId,
       salesId: s.id,
@@ -170,11 +236,19 @@ for (const s of SALESMEN) {
       lastOrder: status === "lama_beli" ? addDays(TODAY, -between(2, 40)) : undefined,
       odooRef: status === "baru" ? undefined : `res.partner/${10400 + outletSeq}`,
       active: true,
-      gps: status === "baru" && rnd() < 0.3 ? undefined : { lat: Number((-6.2 - rnd() * 2).toFixed(5)), lng: Number((106.8 + rnd() * 6).toFixed(5)) },
+      gps:
+        status === "baru" && rnd() < 0.3
+          ? undefined
+          : {
+              lat: Number((beat.lat + Math.sin(beat.dir) * step + Math.cos(beat.dir) * jitter).toFixed(5)),
+              lng: Number((beat.lng + Math.cos(beat.dir) * step - Math.sin(beat.dir) * jitter).toFixed(5)),
+            },
       npwp: rnd() < 0.45 ? `0${between(1, 9)}.${between(100, 999)}.${between(100, 999)}.${between(1, 9)}-${between(100, 999)}.000` : undefined,
       pkp: false,
       priceGroup: cls === "A" ? "Grosir" : pick(["Retail", "Retail", "Grosir", "Horeka / Industri"]),
-      routeId: `R-${s.branchId}-${(i % 3) + 1}`,
+      routeId: `R-${s.code}-${d + 1}`,
+      routeSeq: beat.n,
+      visitFreq,
       source: status === "baru" ? "noo" : "odoo",
     });
     const last = OUTLETS[OUTLETS.length - 1];
@@ -187,23 +261,52 @@ export function nextOutletSeq() {
 }
 
 /* ---------- PJP ---------- */
-export function weeksFor(freq: "F4" | "F2" | "F1", offset: number) {
-  if (freq === "F4") return [1, 2, 3, 4];
-  if (freq === "F2") return offset % 2 === 0 ? [1, 3] : [2, 4];
-  return [(offset % 4) + 1];
-}
+export { weeksFor } from "./pjp-engine";
+/** Default class → frequency mapping (also in DEFAULT_SETTINGS). */
+const SEED_CLASS_FREQ: Record<OutletClass, Frequency> = { A: "F4", B: "F2", C: "F1" };
+export const seedFreqOf = (o: Outlet): Frequency => o.visitFreq ?? (o.status === "lama_belum" ? "F2" : SEED_CLASS_FREQ[o.cls]);
 export const PJP: PjpEntry[] = [];
 let pjpSeq = 1;
-for (const s of SALESMEN) {
-  const outlets = OUTLETS.filter((o) => o.salesId === s.id && o.status !== "baru");
-  outlets.forEach((o, i) => {
-    const freq = o.cls === "A" ? "F4" : o.cls === "B" || o.status === "lama_belum" ? "F2" : "F1";
-    PJP.push({ id: `PJP${pjpSeq++}`, salesId: s.id, outletId: o.id, day: i % 6, freq, weeks: weeksFor(freq, i), seq: Math.floor(i / 6) + 1, validFrom: CYCLE_START });
-  });
-}
 export function nextPjpId() {
   return `PJP${pjpSeq++}`;
 }
+/** Outlets deliberately left out of the seeded PJP so the coverage panel has something to show. */
+export const UNCOVERED_SEED = new Set<string>();
+for (const s of SALESMEN) {
+  const outlets = OUTLETS.filter((o) => o.salesId === s.id && o.status !== "baru");
+  outlets.forEach((o, i) => {
+    if (i === outlets.length - 1 || rnd() < 0.015) UNCOVERED_SEED.add(o.id);
+  });
+  PJP.push(
+    ...generatePjp({
+      salesId: s.id,
+      outlets: outlets.filter((o) => !UNCOVERED_SEED.has(o.id)),
+      routes: ROUTES,
+      freqOf: seedFreqOf,
+      target: 12,
+      validFrom: "2026-10-05",
+      nextId: nextPjpId,
+    })
+  );
+}
+
+/** PJP header per salesman (version, status, validity). */
+export const PJP_HEADERS: PjpHeader[] = SALESMEN.map((s, i) => ({
+  salesId: s.id,
+  version: 2 + (i % 3),
+  status: s.id === "S-SBY-02" ? "Disetujui" : "Dipublikasikan",
+  validFrom: "2026-10-05",
+  publishedAt: s.id === "S-SBY-02" ? undefined : "2026-11-16 06:00",
+  note: s.id === "S-SBY-02" ? "Perubahan disetujui, menunggu publish" : undefined,
+}));
+
+/** Holiday calendar (dummy). National holidays apply to all branches; branchIds limits a local holiday. */
+export const HOLIDAYS: Holiday[] = [
+  { date: "2026-11-20", name: "Libur daerah (contoh)", branchIds: ["SBY", "SMG"] },
+  { date: "2026-12-24", name: "Cuti bersama Natal" },
+  { date: "2026-12-25", name: "Hari Raya Natal" },
+  { date: "2027-01-01", name: "Tahun Baru 2027" },
+];
 
 /* ---------- pipeline ---------- */
 const STAGES_SEED: OppStage[] = ["Prospek", "Prospek", "Dijadwalkan", "Dijadwalkan", "Kunjungan & Negosiasi", "Kunjungan & Negosiasi", "Kunjungan & Negosiasi", "Menang", "Batal"];
@@ -353,6 +456,33 @@ export const DEFAULT_SETTINGS: Settings = {
   geofenceM: 100,
   classFreq: { A: "F4", B: "F2", C: "F1" },
   belumBeliFreq: "F2",
+  pjpCallTarget: 12,
+  pjpMaxCalls: 15,
+  hqCallTarget: 8,
+  hqMaxCalls: 10,
+  classVisitMinutes: { A: 35, B: 25, C: 20 },
+  travelMinutes: 15,
+  cycleWeeks: 4,
+  workDays: [0, 1, 2, 3, 4, 5],
+  branchWorkDays: {},
+  geofenceMode: "flag",
+  photoRequired: true,
+  minVisitMinutes: 5,
+  checkoutRequired: true,
+  extraCallAllowed: true,
+  extraCallNeedsReason: true,
+  extraInCompliance: false,
+  skipReasons: ["Toko tutup", "Pemilik / PIC tidak ada", "Libur / tutup sementara", "Stok masih banyak", "Di luar jam kerja", "Cuaca / akses jalan", "Lainnya"],
+  carryOverMode: "manual",
+  carryOverMaxDays: 2,
+  publishCutoff: "18:00",
+  lockAfterPublish: true,
+  changeApprover: "spv",
+  changeRequestSlaHours: 24,
+  generateBalanceBy: "count",
+  generateKeepRoute: true,
+  routeStartPoint: "branch",
+  reminderTime: "07:00",
   spvEditPjpDirect: true,
   loa: [
     { role: "sales_admin", label: "Sales (tanpa approval)", max: 2 },
@@ -397,11 +527,39 @@ export interface VisitStat {
   effective: number;
   extra: number;
 }
-export const VISITS: VisitStat[] = SALESMEN.map((s) => {
-  const planned = between(70, 110);
-  const actual = Math.round(planned * (0.72 + rnd() * 0.25));
-  return { salesId: s.id, planned, actual, effective: Math.round(actual * (0.45 + rnd() * 0.3)), extra: between(2, 9) };
-});
+/** Visits of the current cycle up to yesterday, from the same simulated Mile Field execution as the PJP page. */
+export const VISITS: VisitStat[] = (() => {
+  const bySales = new Map<string, PjpEntry[]>();
+  PJP.forEach((e) => bySales.set(e.salesId, [...(bySales.get(e.salesId) ?? []), e]));
+  return SALESMEN.map((s) => {
+    const entries = bySales.get(s.id) ?? [];
+    const pool = OUTLETS.filter((o) => o.salesId === s.id).map((o) => o.id);
+    const plannedOn = (date: string) => {
+      const p = cyclePos(date);
+      if (!p) return [];
+      return entries
+        .filter((e) => isOn(e, p.week, p.day) && validOn(e, date))
+        .sort((a, b) => a.seq - b.seq)
+        .map((e) => ({ key: e.id, outletId: e.outletId }));
+    };
+    const stat = { salesId: s.id, planned: 0, actual: 0, effective: 0, extra: 0 };
+    for (let date = CYCLE_START; date < TODAY; date = addDays(date, 1)) {
+      if (!cyclePos(date)) continue;
+      const holiday = HOLIDAYS.some((h) => h.date === date && (!h.branchIds || h.branchIds.includes(s.branchId)));
+      const prev = prevWorkday(date);
+      const lines = simulateDay({ date, today: TODAY, salesId: s.id, planned: plannedOn(date), prevPlanned: plannedOn(prev), prevDate: prev, extraPool: pool, holiday });
+      for (const l of lines) {
+        if (l.source === "Extra") stat.extra++;
+        else if (l.source === "PJP" && l.status !== "Libur") {
+          stat.planned++;
+          if (l.status === "Selesai") stat.actual++;
+        }
+        if (l.effective) stat.effective++;
+      }
+    }
+    return stat;
+  });
+})();
 
 /* ---------- users (synced from MileApp) ---------- */
 export const USERS: ModuleUser[] = [
@@ -457,7 +615,7 @@ export const IMPORT_TEMPLATES = [
   { key: "target", name: "Target", desc: "Target per sales / cabang / produk per bulan" },
 ];
 export const IMPORT_LOGS: ImportLog[] = [
-  { id: "L1", kind: "Import", template: "Pelanggan", file: "import-awal-pelanggan-odoo.xlsx", by: "Rina Kusuma", at: "2026-11-02 09:10", accepted: 2184, rejected: 37 },
+  { id: "L1", kind: "Import", template: "Pelanggan", file: "import-awal-pelanggan-odoo.xlsx", by: "Rina Kusuma", at: "2026-11-02 09:10", accepted: 5784, rejected: 37 },
   { id: "L2", kind: "Import", template: "Produk & UoM", file: "import-awal-produk.xlsx", by: "Rina Kusuma", at: "2026-11-02 09:25", accepted: 412, rejected: 0 },
   { id: "L3", kind: "Import", template: "Piutang & limit kredit", file: "piutang-per-161126.xlsx", by: "Agus Setiawan", at: "2026-11-16 17:02", accepted: 1961, rejected: 4 },
   { id: "L4", kind: "Export", template: "Pesanan", file: "pesanan-sby-nov.xlsx", by: "Sari Anggraini", at: "2026-11-16 17:30", accepted: 128, rejected: 0 },
@@ -478,19 +636,6 @@ BRANCHES.forEach((b) => {
   b.regionId = REGIONS.find((r) => r.branchIds.includes(b.id))?.id;
   b.active = true;
 });
-const AREAS = ["Pusat Kota", "Pasar & Pergudangan", "Kawasan Industri"];
-export const ROUTES: Route[] = BRANCHES.flatMap((b) =>
-  [1, 2, 3].map((i) => ({
-    id: `R-${b.id}-${i}`,
-    code: `${b.id}-R${i}`,
-    name: `${b.city} ${AREAS[i - 1]}`,
-    branchId: b.id,
-    salesId: SALESMEN.filter((s) => s.branchId === b.id)[i - 1]?.id,
-    area: AREAS[i - 1],
-    active: true,
-  }))
-);
-
 /* ---------- price lists (module 02) ---------- */
 export const PRICE_GROUPS = ["Retail", "Grosir", "Horeka / Industri"];
 export const PRICE_LISTS: PriceList[] = [
@@ -504,10 +649,12 @@ export const PRICE_LISTS: PriceList[] = [
 export const PJP_REQUESTS: PjpChangeRequest[] = (() => {
   const team = SALESMEN.filter((s) => s.spvId === "SPV-SBY-1");
   const o0 = OUTLETS.filter((o) => o.salesId === team[0].id);
-  const o1 = OUTLETS.filter((o) => o.salesId === team[1].id);
+  const add = o0.find((o) => UNCOVERED_SEED.has(o.id)) ?? o0[o0.length - 1];
+  const e1 = PJP.find((e) => e.salesId === team[1].id && e.days.length === 1 && e.days[0] === 0) ?? PJP.find((e) => e.salesId === team[1].id)!;
+  const e3 = PJP.find((e) => e.salesId === team[0].id && e.freq === "F1")!;
   return [
-    { id: "PCR1", salesId: team[0].id, outletId: o0[o0.length - 1].id, kind: "Tambah", detail: "Rabu · F2 (M1, M3)", reason: "Outlet mulai order rutin", requestedBy: team[0].name, at: "2026-11-17 07:40", status: "pending" },
-    { id: "PCR2", salesId: team[1].id, outletId: o1[2].id, kind: "Ubah hari", detail: "Senin → Kamis", reason: "Pemilik hanya ada di toko hari Kamis", requestedBy: team[1].name, at: "2026-11-16 16:05", status: "pending" },
-    { id: "PCR3", salesId: team[0].id, outletId: o0[1].id, kind: "Hapus", detail: "Keluar dari PJP mulai minggu depan", reason: "Toko tutup permanen", requestedBy: team[0].name, at: "2026-11-14 10:20", status: "approved", decidedBy: "Dewi Lestari", decisionReason: "Sudah dicek" },
+    { id: "PCR1", salesId: team[0].id, outletId: add.id, kind: "Tambah", detail: "Rabu · F2 (M1, M3)", reason: "Outlet mulai order rutin", requestedBy: team[0].name, at: "2026-11-17 07:40", status: "pending" },
+    { id: "PCR2", salesId: team[1].id, outletId: e1.outletId, kind: "Ubah hari", detail: `${DAYS[e1.days[0]]} → Kamis`, reason: "Pemilik hanya ada di toko hari Kamis", requestedBy: team[1].name, at: "2026-11-16 16:05", status: "pending" },
+    { id: "PCR3", salesId: team[0].id, outletId: e3.outletId, kind: "Hapus", detail: "Keluar dari PJP mulai minggu depan", reason: "Toko tutup permanen", requestedBy: team[0].name, at: "2026-11-14 10:20", status: "approved", decidedBy: "Dewi Lestari", decisionReason: "Sudah dicek" },
   ];
 })();

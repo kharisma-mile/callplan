@@ -32,9 +32,9 @@ export function StatCard({
           <Icon className={`h-5 w-5 ${t.fg}`} />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <p className="truncate text-xs font-medium text-muted-foreground" title={label}>{label}</p>
           <p className="text-xl font-bold leading-tight text-foreground">{value}</p>
-          {hint && <p className="truncate text-xs text-muted-foreground">{hint}</p>}
+          {hint && <p className="truncate text-xs text-muted-foreground" title={hint}>{hint}</p>}
         </div>
       </CardContent>
     </Card>

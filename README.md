@@ -30,8 +30,10 @@ src/
   store/app-store.tsx     in-memory state, session, permissions, approval engine
   lib/rbac.ts             resources, {action}_{resource} permissions, default role matrix
   lib/approval.ts         approval steps per type, LOA tiers, order checks
-  data/mock.ts            dummy data (9 branches + HQ Direct Sales, 61 salesmen, ~320 outlets,
-                          regions, routes, price lists, PJP change requests)
+  data/mock.ts            dummy data (9 branches + HQ Direct Sales, 61 salesmen, ~5,800 outlets
+                          (≈70–120 per salesman, ~40–60 at HQ), 366 routes / beats, ~5,400 PJP
+                          entries, holidays, regions, price lists, PJP change requests)
+  data/pjp-engine.ts      PJP logic: F1–F12 patterns, auto-generate + balancing, simulated execution
   pages/                  login, dashboard, pjp, outlets, pipeline, approvals, orders,
                           targets, reports, products (product & price list),
                           territory (branch / region / route / sales team),
@@ -56,7 +58,7 @@ You can switch role at any time from the user menu in the top right.
 
 1. **Login as Sales SPV (Dewi Lestari).** The sidebar shows only her pages; the top bar shows *Cabang Surabaya · Tim Dewi*. The dashboard shows target vs actual, visits vs plan, effective call ratio, pipeline per stage, **overdue follow-ups (SPV / BM only)** and *Approval menunggu Anda* — click that card to jump to the approval page with the most waiting items.
 2. **Outlet / Pelanggan.** The three status cards (Pelanggan Baru / Lama – sudah beli / Lama – belum beli) are **derived**: hover the info icon for the rule. Open **Buat Outlet**: no status field, but GPS pin, NPWP / PKP, segmen, rute, price group, TOP. Type the name of an existing outlet (or its phone) → the **Kemungkinan Duplikat** dialog appears (*Tetap simpan sebagai outlet baru* / *Batal*). As SPV, limit kredit / TOP / price group are read-only in Varian B (only `update_credit_limit`, default Finance); in Varian A the Odoo fields carry an "Odoo" badge.
-3. **PJP / Call Plan.** Pick a salesman. The 4-week grid uses the class → frequency mapping from Pengaturan. The table shows the **route sequence** (move up / down) and *valid from / to*. **Tambah outlet** asks for the start date; removing and **Publish ke Mile Field** ask for confirmation. Tab **Permintaan Perubahan**: approve or reject the sales' change requests (`update_pjp`, no separate approve permission).
+3. **PJP / Call Plan.** Pick a salesman (e.g. a Surabaya salesman with ~110 outlets). The **week view** (default: current week M3) shows Senin–Sabtu with **10–15 visits per day in route order**, a calls-vs-target badge (target 12 / max 15 from Pengaturan; green / amber / red), estimated day duration and the beat area. **Drag** a card to another day (amber/red capacity toast), onto another card to reorder, or onto a salesman in the strip that appears to move the outlet. Friday 20 Nov is a dummy **local holiday** for SBY: click *Geser n ke …* (suggested lightest working day in the same week) to shift that date only. Switch **Siklus → Berikutnya** to see 24–25 Dec (Natal) flagged, or use **Salin ke siklus berikutnya** (new Draft version). **Ringkas** shows the 4×6 workload heatmap. In the table, change frequency to **F8 / F12** and toggle visit days; route · sequence moves up / down. Try **Generate otomatis** (preview before / after, balancing F1 / F2 to the lightest week), **Import** (validation preview with error rows) and **Export**. Tabs: **Peta Rute** (numbered pins from the branch office, *Urutkan berdasarkan jarak*), **Cakupan & Beban** (active outlets not in PJP → *Jadwalkan*, calls/day per salesman vs target, frequency mix), **Eksekusi** (simulated Mile Field data: planned vs done, effective call, skip reasons, carry-over, extra calls) and **Permintaan Perubahan** (approve / reject with `update_pjp`). **Publish ke Mile Field** creates the week's tasks in route order.
 4. **Pipeline.** A *Pelanggan Baru* opportunity carries an NOO badge (NOO is created at **Prospek**: prospect outlet + Approval NOO SPV → Finance). **Buat Peluang** with type Pelanggan Baru creates both. Mark an opportunity **Batal** with a reason → it stays in its stage with an hourglass: *Batal needs SPV approval by default*. Only *Pelanggan Baru (NOO)* can be chosen because the existing-customer pipeline is **off by default** (AS-14). Try the *Follow-up* filter (Terlambat / Hari ini / 7 hari).
 5. **Approval → Tahap Pipeline.** Dewi approves the Batal request; the card moves to Batal.
 6. **Approval → Diskon (LOA).** The discount requests go to the **single covering tier** (Dewi: up to 5%). The 7% order discount waits for the Branch Manager. Rejecting a discount that belongs to an order **rejects the order**. Requests pending > 24 h show *Lewat SLA*.
@@ -77,7 +79,7 @@ You can switch role at any time from the user menu in the top right.
 ## Notes / limits
 
 - Mockup only: no authentication, no persistence, no real Odoo or MileApp calls. All toasts and sync states are simulated.
-- The LOA tiers (Sales 2%, SPV 5%, BM 10%, CD above), the 30-day overdue rule, the 24-hour SLA and the F4 / F2 / F1 defaults are example values proposed by MileApp. UP sets the final numbers.
+- The LOA tiers (Sales 2%, SPV 5%, BM 10%, CD above), the 30-day overdue rule, the 24-hour SLA and the F4 / F2 / F1 class defaults, the 12 / 15 calls-per-day capacity and the dummy holidays are example values proposed by MileApp. UP sets the final numbers.
 - Order numbers follow `SO-<branch>-<yyyymm>-<seq>`; the Mile Field client order id (`MF-ORD-…`) is shown only as a reference.
 - The duplicate check compares NPWP, phone, and similar names in the same city (a stand-in for the 50 m GPS radius).
 - The production stack for delivery remains Laravel + Inertia React + shadcn with `spatie/laravel-permission` and a per-resource permission generator.

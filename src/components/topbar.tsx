@@ -20,14 +20,14 @@ export function Topbar() {
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-6">
-      <div className="flex items-center gap-2">
-        <Badge variant="info" title="Mode demo — di produksi varian ditetapkan saat deployment">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden">
+        <Badge variant="info" className="max-w-full truncate" title="Mode demo — di produksi varian ditetapkan saat deployment">
           Varian {settings.variant} · {settings.variant === "A" ? "Odoo" : "Standalone"} (mode demo)
         </Badge>
-        <Badge variant="outline">Cakupan data: {scopeLabel}</Badge>
+        <Badge variant="outline" className="max-w-full truncate">Cakupan data: {scopeLabel}</Badge>
       </div>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex shrink-0 items-center gap-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2.5 rounded-md px-2 py-1 hover:bg-muted">

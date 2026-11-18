@@ -150,7 +150,7 @@ export function OrdersPage() {
       <p className="text-xs text-muted-foreground">
         Pemicu approval: <b>{autoMode ? "otomatis saat pesanan masuk" : "oleh Sales Admin (tombol Ajukan approval)"}</b> · ubah di Pengaturan.
       </p>
-      <div className="flex w-fit gap-1 rounded-md bg-muted p-1">
+      <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-muted p-1">
         {(
           [
             ["review", "Menunggu Review"],
@@ -165,7 +165,7 @@ export function OrdersPage() {
               setFilter(k);
               setSelId(null);
             }}
-            className={cn("h-[30px] rounded-sm px-3 text-sm font-medium", filter === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}
+            className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium", filter === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}
           >
             {l} ({groups[k].length})
           </button>

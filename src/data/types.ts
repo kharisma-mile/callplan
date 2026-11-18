@@ -18,6 +18,7 @@ export interface Region {
   active: boolean;
 }
 
+/** Route / beat: a group of outlets of one salesman visited in sequence, normally on one weekday (module 03 + 04). */
 export interface Route {
   id: string;
   code: string;
@@ -26,6 +27,8 @@ export interface Route {
   salesId?: string;
   area: string;
   active: boolean;
+  /** Default weekday of the beat (0 = Senin .. 5 = Sabtu); PJP generate uses it as the visit day. */
+  day?: number;
 }
 
 /** Module 02: price list per channel / region (PRD-only page). */
@@ -84,7 +87,8 @@ export interface ModuleUser {
 
 export type CustomerStatus = "baru" | "lama_beli" | "lama_belum";
 export type OutletClass = "A" | "B" | "C";
-export type Frequency = "F4" | "F2" | "F1";
+/** Visits per 4-week cycle: F1 = 1x, F2 = every 2 weeks, F4 = weekly, F8 = 2x/week, F12 = 3x/week. */
+export type Frequency = "F1" | "F2" | "F4" | "F8" | "F12";
 
 export interface Outlet {
   id: string;
@@ -113,6 +117,10 @@ export interface Outlet {
   pkp: boolean;
   priceGroup: string;
   routeId?: string;
+  /** Visit order within the route (1 = first stop). */
+  routeSeq?: number;
+  /** Per-outlet frequency override (e.g. key accounts F8 / F12); empty = class default from Pengaturan. */
+  visitFreq?: Frequency;
   source: "odoo" | "import" | "noo" | "manual";
 }
 
@@ -131,16 +139,44 @@ export interface Product {
   active?: boolean;
 }
 
+/** One outlet in a salesman's PJP. Stored as frequency + week pattern + visit days; calls per cycle = weeks x days. */
 export interface PjpEntry {
   id: string;
   salesId: string;
   outletId: string;
-  day: number; // 0 = Senin .. 5 = Sabtu
+  routeId?: string;
+  /** Visit weekdays, 0 = Senin .. 5 = Sabtu (F8: 2 days, F12: 3 days, otherwise 1). */
+  days: number[];
   freq: Frequency;
-  weeks: number[]; // 1..4
+  weeks: number[]; // 1..4 within the 4-week cycle
   seq: number; // visit order within the day (route sequence)
   validFrom: string;
   validTo?: string;
+}
+
+/** PJP header per salesman: version, status and validity (module 04 FR-005, FR-013). */
+export interface PjpHeader {
+  salesId: string;
+  version: number;
+  status: "Draft" | "Disetujui" | "Dipublikasikan";
+  validFrom: string;
+  validTo?: string;
+  publishedAt?: string;
+  note?: string;
+}
+
+/** Holiday calendar entry (national or per branch). */
+export interface Holiday {
+  date: string;
+  name: string;
+  branchIds?: string[];
+}
+
+/** Date-specific move of a planned day (e.g. holiday) to another date, without changing the PJP pattern. */
+export interface PjpShift {
+  salesId: string;
+  from: string;
+  to: string;
 }
 
 /** Module 04: PJP change request from Sales / BM, decided by SPV with `update_pjp`. */
@@ -317,6 +353,44 @@ export interface Settings {
   minOrder: boolean;
   geofenceM: number;
   classFreq: Record<OutletClass, Frequency>;
+  /** PJP capacity: target calls per day (B2B plastics 10-15; FMCG typically 20-30). */
+  pjpCallTarget: number;
+  /** Hard warning above this number of calls per day. */
+  pjpMaxCalls: number;
+  /** HQ Direct Sales (key account channel) has its own capacity. */
+  hqCallTarget: number;
+  hqMaxCalls: number;
+  /** Standard visit minutes per outlet class + travel minutes between outlets (estimated day duration). */
+  classVisitMinutes: Record<OutletClass, number>;
+  travelMinutes: number;
+  /** PJP cycle (weeks) and working days (0 = Senin .. 5 = Sabtu), with per-branch override. */
+  cycleWeeks: number;
+  workDays: number[];
+  branchWorkDays: Record<string, number[]>;
+  /** Check-in / visit rules (Mile Field Flow). */
+  geofenceMode: "flag" | "block";
+  photoRequired: boolean;
+  minVisitMinutes: number;
+  checkoutRequired: boolean;
+  /** Extra call policy. */
+  extraCallAllowed: boolean;
+  extraCallNeedsReason: boolean;
+  extraInCompliance: boolean;
+  /** Skip reasons master + reschedule / carry-over. */
+  skipReasons: string[];
+  carryOverMode: "manual" | "auto" | "off";
+  carryOverMaxDays: number;
+  /** Publish / lock and change-request rules. */
+  publishCutoff: string;
+  lockAfterPublish: boolean;
+  changeApprover: "spv" | "spv_bm";
+  changeRequestSlaHours: number;
+  /** Auto-generate parameters. */
+  generateBalanceBy: "count" | "duration";
+  generateKeepRoute: boolean;
+  routeStartPoint: "branch" | "home";
+  /** Daily call plan push reminder (HH:MM). */
+  reminderTime: string;
   belumBeliFreq: Frequency;
   spvEditPjpDirect: boolean;
 }

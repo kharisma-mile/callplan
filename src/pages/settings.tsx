@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/switch";
 import { useApp } from "@/store/app-store";
+import { BRANCHES, HOLIDAYS } from "@/data/mock";
 import type { Frequency, Settings, Variant } from "@/data/types";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,33 @@ const LABELS: Partial<Record<keyof Settings, string>> = {
   classFreq: "Frekuensi per kelas",
   belumBeliFreq: "Frekuensi Pelanggan Lama – belum beli",
   spvEditPjpDirect: "SPV edit PJP langsung",
+  pjpCallTarget: "Target call per hari",
+  pjpMaxCalls: "Maksimum call per hari",
+  hqCallTarget: "Target call per hari (HQ)",
+  hqMaxCalls: "Maksimum call per hari (HQ)",
+  classVisitMinutes: "Durasi kunjungan per kelas",
+  travelMinutes: "Perjalanan antar outlet (menit)",
+  cycleWeeks: "Panjang siklus PJP",
+  workDays: "Hari kerja",
+  branchWorkDays: "Hari kerja per cabang",
+  geofenceMode: "Mode geofence",
+  photoRequired: "Foto check-in wajib",
+  minVisitMinutes: "Durasi kunjungan minimum",
+  checkoutRequired: "Check-out wajib",
+  extraCallAllowed: "Extra call diizinkan",
+  extraCallNeedsReason: "Extra call wajib alasan",
+  extraInCompliance: "Extra call masuk compliance",
+  skipReasons: "Alasan skip",
+  carryOverMode: "Carry-over",
+  carryOverMaxDays: "Carry-over maks hari",
+  publishCutoff: "Batas publish (H-1)",
+  lockAfterPublish: "Kunci PJP setelah publish",
+  changeApprover: "Penyetuju perubahan PJP",
+  changeRequestSlaHours: "SLA permintaan perubahan",
+  generateBalanceBy: "Generate: dasar penyeimbangan",
+  generateKeepRoute: "Generate: pertahankan rute",
+  routeStartPoint: "Titik awal rute",
+  reminderTime: "Jam pengingat call plan",
   salesAdminReview: "Review Sales Admin",
   orderWithoutVisitHQ: "Pesanan tanpa kunjungan (HQ Direct Sales)",
   nooOrderBeforeFinance: "Pesanan pertama NOO sebelum approval Finance",
@@ -99,8 +127,8 @@ function SettingsCard({
 
 function Row({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+      <div className="min-w-0 flex-1 basis-[200px]">
         <p className="text-sm font-medium">{title}</p>
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
@@ -126,10 +154,68 @@ function Pick<T extends string>({ value, onChange, options, disabled, w = "w-[22
   );
 }
 
+const DAY_S = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+function DayToggles({ value, onChange, disabled }: { value: number[]; onChange: (v: number[]) => void; disabled?: boolean }) {
+  return (
+    <div className="flex gap-0.5">
+      {DAY_S.map((d, i) => (
+        <button
+          key={d}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(value.includes(i) ? value.filter((x) => x !== i) : [...value, i].sort((a, b) => a - b))}
+          className={cn("h-7 w-9 rounded-sm text-[11px] font-semibold", value.includes(i) ? "bg-primary text-white" : "bg-muted text-muted-foreground")}
+        >
+          {d}
+        </button>
+      ))}
+    </div>
+  );
+}
+function BranchDays({ value, fallback, onChange, disabled }: { value: Record<string, number[]>; fallback: number[]; onChange: (v: Record<string, number[]>) => void; disabled?: boolean }) {
+  const [b, setB] = useState("HQ");
+  const cur = value[b];
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="flex items-center gap-2">
+        <Pick value={b} onChange={setB} options={BRANCHES.map((x) => [x.id, x.name] as [string, string])} w="w-[170px]" />
+        {cur && !disabled && (
+          <button
+            type="button"
+            className="text-xs text-primary underline"
+            onClick={() => {
+              const n = { ...value };
+              delete n[b];
+              onChange(n);
+            }}
+          >
+            Ikut default
+          </button>
+        )}
+      </div>
+      <DayToggles value={cur ?? fallback} disabled={disabled} onChange={(v) => onChange({ ...value, [b]: v })} />
+      {Object.keys(value).length > 0 && <p className="text-[11px] text-muted-foreground">Override: {Object.entries(value).map(([k, v]) => `${k} (${v.map((x) => DAY_S[x]).join(", ")})`).join("; ")}</p>}
+    </div>
+  );
+}
+function AddReason({ onAdd }: { onAdd: (r: string) => void }) {
+  const [v, setV] = useState("");
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Input className="h-6 w-36 text-xs" placeholder="Alasan baru" value={v} onChange={(e) => setV(e.target.value)} />
+      <button type="button" className="text-xs text-primary" disabled={!v.trim()} onClick={() => { onAdd(v.trim()); setV(""); }}>
+        + Tambah
+      </button>
+    </span>
+  );
+}
+
 const FREQ: [Frequency, string][] = [
+  ["F12", "F12 · 3×/minggu"],
+  ["F8", "F8 · 2×/minggu"],
   ["F4", "F4 · tiap minggu"],
   ["F2", "F2 · 2 minggu sekali"],
-  ["F1", "F1 · sebulan sekali"],
+  ["F1", "F1 · 1×/4 minggu"],
 ];
 
 export function SettingsPage() {
@@ -327,28 +413,213 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        <SettingsCard title="PJP / call plan" keys={["classFreq", "belumBeliFreq", "spvEditPjpDirect"]}>
+        <SettingsCard
+          title="PJP / call plan"
+          className="xl:col-span-2"
+          keys={["cycleWeeks", "workDays", "branchWorkDays", "classFreq", "belumBeliFreq", "pjpCallTarget", "pjpMaxCalls", "hqCallTarget", "hqMaxCalls", "classVisitMinutes", "travelMinutes", "generateBalanceBy", "generateKeepRoute", "routeStartPoint"]}
+          validate={(d) =>
+            d.pjpCallTarget < 1 || d.pjpMaxCalls < d.pjpCallTarget || d.hqMaxCalls < d.hqCallTarget
+              ? "Maksimum call per hari harus ≥ target call per hari."
+              : !d.workDays.length
+                ? "Pilih minimal satu hari kerja."
+                : null
+          }
+        >
+          {(d, set, ed) => (
+            <div className="grid gap-x-8 gap-y-4 lg:grid-cols-2">
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Siklus & frekuensi</p>
+                <Row title="Panjang siklus PJP" hint="Rotasi 4 minggu (praktik umum SFA); minggu ke-n dihitung dari tanggal acuan siklus.">
+                  <Badge variant="neutral">{d.cycleWeeks} minggu (tetap)</Badge>
+                </Row>
+                <Row title="Hari kerja (default)" hint="Hari yang boleh berisi kunjungan. Override per cabang di bawah.">
+                  <DayToggles value={d.workDays} disabled={!ed} onChange={(v) => set({ workDays: v })} />
+                </Row>
+                <Row title="Override hari kerja per cabang" hint="Contoh: HQ Direct Sales Senin–Jumat. Kosong = ikut default.">
+                  <BranchDays value={d.branchWorkDays} fallback={d.workDays} disabled={!ed} onChange={(v) => set({ branchWorkDays: v })} />
+                </Row>
+                {(["A", "B", "C"] as const).map((c) => (
+                  <Row key={c} title={`Frekuensi default kelas ${c}`} hint="Dipakai saat outlet masuk PJP / generate. F8 / F12 dipilih manual per outlet (key account).">
+                    <Pick value={d.classFreq[c]} disabled={!ed} onChange={(v) => set({ classFreq: { ...d.classFreq, [c]: v } })} options={FREQ} />
+                  </Row>
+                ))}
+                <Row title="Pelanggan Lama – belum beli" hint="Frekuensi khusus untuk outlet yang belum pernah beli (AS-16).">
+                  <Pick value={d.belumBeliFreq} disabled={!ed} onChange={(v) => set({ belumBeliFreq: v })} options={FREQ} />
+                </Row>
+                <p className="rounded-md bg-muted px-3 py-2 text-[11px] text-muted-foreground">
+                  F1 = 1×/4 minggu (satu minggu) · F2 = 2×/4 minggu (M1&amp;M3 / M2&amp;M4) · F4 = tiap minggu · F8 = 2×/minggu (2 hari, mis. Sen &amp; Kam) · F12 = 3×/minggu (Sen, Rab, Jum).
+                </p>
+              </div>
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kapasitas & generate</p>
+                <Row title="Target / maks call per hari — sales cabang" hint="B2B plastik 10–15 (FMCG umumnya 20–30). Di atas target kuning, di atas maks merah.">
+                  <div className="flex gap-2">
+                    <Input type="number" className="w-20 text-right" disabled={!ed} value={d.pjpCallTarget} onChange={(e) => set({ pjpCallTarget: Number(e.target.value) })} />
+                    <Input type="number" className="w-20 text-right" disabled={!ed} value={d.pjpMaxCalls} onChange={(e) => set({ pjpMaxCalls: Number(e.target.value) })} />
+                  </div>
+                </Row>
+                <Row title="Target / maks call per hari — HQ key account" hint="Kanal key account: kunjungan lebih lama, call per hari lebih sedikit.">
+                  <div className="flex gap-2">
+                    <Input type="number" className="w-20 text-right" disabled={!ed} value={d.hqCallTarget} onChange={(e) => set({ hqCallTarget: Number(e.target.value) })} />
+                    <Input type="number" className="w-20 text-right" disabled={!ed} value={d.hqMaxCalls} onChange={(e) => set({ hqMaxCalls: Number(e.target.value) })} />
+                  </div>
+                </Row>
+                <Row title="Durasi kunjungan standar A / B / C (menit)" hint="Untuk estimasi durasi hari dan generate berbasis durasi.">
+                  <div className="flex gap-2">
+                    {(["A", "B", "C"] as const).map((c) => (
+                      <Input key={c} type="number" className="w-16 text-right" disabled={!ed} value={d.classVisitMinutes[c]} onChange={(e) => set({ classVisitMinutes: { ...d.classVisitMinutes, [c]: Number(e.target.value) } })} />
+                    ))}
+                  </div>
+                </Row>
+                <Row title="Perjalanan antar outlet (menit)">
+                  <Input type="number" className="w-20 text-right" disabled={!ed} value={d.travelMinutes} onChange={(e) => set({ travelMinutes: Number(e.target.value) })} />
+                </Row>
+                <Row title="Generate: seimbangkan berdasarkan" hint="Jumlah call per hari, atau durasi (kelas A dihitung lebih berat).">
+                  <Pick value={d.generateBalanceBy} disabled={!ed} onChange={(v) => set({ generateBalanceBy: v })} options={[["count", "Jumlah call"], ["duration", "Durasi kunjungan"]]} w="w-[180px]" />
+                </Row>
+                <Row title="Generate: pertahankan rute / beat" hint="Outlet tetap di hari rutenya; hanya F1 / F2 yang boleh digeser ke hari tetangga.">
+                  <Switch checked={d.generateKeepRoute} disabled={!ed} onChange={(v) => set({ generateKeepRoute: v })} />
+                </Row>
+                <Row title="Titik awal / akhir rute" hint="Dipakai peta rute dan urutan berdasarkan jarak.">
+                  <Pick value={d.routeStartPoint} disabled={!ed} onChange={(v) => set({ routeStartPoint: v })} options={[["branch", "Kantor cabang"], ["home", "Rumah salesman"]]} w="w-[180px]" />
+                </Row>
+              </div>
+            </div>
+          )}
+        </SettingsCard>
+
+        <SettingsCard
+          title="Kunjungan & eksekusi (Mile Field)"
+          keys={["geofenceM", "geofenceMode", "photoRequired", "minVisitMinutes", "checkoutRequired", "extraCallAllowed", "extraCallNeedsReason", "extraInCompliance", "skipReasons", "carryOverMode", "carryOverMaxDays", "reminderTime"]}
+          validate={(d) => (d.geofenceM < 10 || d.geofenceM > 1000 ? "Radius harus antara 10 dan 1000 meter." : d.skipReasons.length < 2 ? "Minimal dua alasan skip." : null)}
+        >
           {(d, set, ed) => (
             <>
-              {(["A", "B", "C"] as const).map((c) => (
-                <Row key={c} title={`Kelas ${c}`} hint="Frekuensi kunjungan default saat outlet masuk PJP (berlaku mulai generate PJP berikutnya).">
-                  <Pick value={d.classFreq[c]} disabled={!ed} onChange={(v) => set({ classFreq: { ...d.classFreq, [c]: v } })} options={FREQ} />
-                </Row>
-              ))}
-              <Row title="Pelanggan Lama – belum beli" hint="Frekuensi khusus untuk outlet yang belum pernah beli (AS-16).">
-                <Pick value={d.belumBeliFreq} disabled={!ed} onChange={(v) => set({ belumBeliFreq: v })} options={FREQ} />
+              <Row title="Radius geofence check-in (m)" hint="Default 100 m. Flag = boleh check-in, ditandai di luar radius; Blok = tidak bisa check-in.">
+                <div className="flex gap-2">
+                  <Input type="number" className="w-20 text-right" disabled={!ed} value={d.geofenceM} onChange={(e) => set({ geofenceM: Number(e.target.value) })} />
+                  <Pick value={d.geofenceMode} disabled={!ed} onChange={(v) => set({ geofenceMode: v })} options={[["flag", "Flag"], ["block", "Blok"]]} w="w-[96px]" />
+                </div>
               </Row>
-              <Row title="SPV boleh mengubah PJP langsung" hint="Selain menyetujui permintaan perubahan dari sales (update_pjp).">
-                <Switch checked={d.spvEditPjpDirect} disabled={!ed} onChange={(v) => set({ spvEditPjpDirect: v })} />
+              <Row title="Foto check-in wajib" hint="Foto kamera langsung (bukan galeri).">
+                <Switch checked={d.photoRequired} disabled={!ed} onChange={(v) => set({ photoRequired: v })} />
               </Row>
+              <Row title="Durasi kunjungan minimum (menit)" hint="Di bawah ini kunjungan ditandai, tidak dihitung effective time.">
+                <Input type="number" className="w-20 text-right" disabled={!ed} value={d.minVisitMinutes} onChange={(e) => set({ minVisitMinutes: Number(e.target.value) })} />
+              </Row>
+              <Row title="Check-out wajib" hint="Kunjungan tanpa check-out tidak dihitung selesai (compliance).">
+                <Switch checked={d.checkoutRequired} disabled={!ed} onChange={(v) => set({ checkoutRequired: v })} />
+              </Row>
+              <Row title="Extra call diizinkan / wajib alasan" hint="Kunjungan di luar PJP (follow-up, tak terencana).">
+                <div className="flex gap-3">
+                  <Switch checked={d.extraCallAllowed} disabled={!ed} onChange={(v) => set({ extraCallAllowed: v })} />
+                  <Switch checked={d.extraCallNeedsReason} disabled={!ed || !d.extraCallAllowed} onChange={(v) => set({ extraCallNeedsReason: v })} />
+                </div>
+              </Row>
+              <Row title="Extra call masuk compliance" hint="Default mati: extra call dihitung terpisah, tidak masuk penyebut call compliance.">
+                <Switch checked={d.extraInCompliance} disabled={!ed} onChange={(v) => set({ extraInCompliance: v })} />
+              </Row>
+              <Row title="Carry-over kunjungan dijadwalkan ulang" hint="Manual: sales pilih tanggal; Otomatis: hari kerja berikutnya. Selalu dalam minggu yang sama.">
+                <div className="flex gap-2">
+                  <Pick value={d.carryOverMode} disabled={!ed} onChange={(v) => set({ carryOverMode: v })} options={[["manual", "Manual"], ["auto", "Otomatis"], ["off", "Nonaktif"]]} w="w-[120px]" />
+                  <Input type="number" title="Maks hari" className="w-16 text-right" disabled={!ed || d.carryOverMode === "off"} value={d.carryOverMaxDays} onChange={(e) => set({ carryOverMaxDays: Number(e.target.value) })} />
+                </div>
+              </Row>
+              <Row title="Jam pengingat call plan" hint="Push ke Mile Field: jumlah kunjungan hari ini.">
+                <Input type="time" className="w-28" disabled={!ed} value={d.reminderTime} onChange={(e) => set({ reminderTime: e.target.value })} />
+              </Row>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Master alasan skip</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {d.skipReasons.map((r) => (
+                    <span key={r} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs">
+                      {r}
+                      {ed && r !== "Lainnya" && (
+                        <button className="text-muted-foreground hover:text-[#BF2130]" onClick={() => set({ skipReasons: d.skipReasons.filter((x) => x !== r) })} title="Hapus">
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                  {ed && <AddReason onAdd={(r) => !d.skipReasons.includes(r) && set({ skipReasons: [...d.skipReasons.filter((x) => x !== "Lainnya"), r, "Lainnya"] })} />}
+                </div>
+                <p className="text-[11px] text-muted-foreground">"Lainnya" selalu ada dan wajib teks.</p>
+              </div>
             </>
           )}
         </SettingsCard>
 
         <SettingsCard
+          title="Publish, kunci & permintaan perubahan PJP"
+          keys={["publishCutoff", "lockAfterPublish", "spvEditPjpDirect", "changeApprover", "changeRequestSlaHours"]}
+        >
+          {(d, set, ed) => (
+            <>
+              <Row title="Batas publish call plan" hint="Publish paling lambat H-1 pada jam ini; bila belum, job malam menerbitkan versi Disetujui terakhir.">
+                <div className="flex items-center gap-2 text-sm">
+                  H-1 <Input type="time" className="w-28" disabled={!ed} value={d.publishCutoff} onChange={(e) => set({ publishCutoff: e.target.value })} />
+                </div>
+              </Row>
+              <Row title="Kunci PJP setelah publish" hint="Perubahan sesudah publish lewat Permintaan Perubahan.">
+                <Switch checked={d.lockAfterPublish} disabled={!ed} onChange={(v) => set({ lockAfterPublish: v })} />
+              </Row>
+              <Row title="SPV boleh mengubah PJP langsung" hint="SPV / Admin tetap bisa mengubah PJP terkunci (update_pjp); perubahan perlu publish ulang.">
+                <Switch checked={d.spvEditPjpDirect} disabled={!ed} onChange={(v) => set({ spvEditPjpDirect: v })} />
+              </Row>
+              <Row title="Penyetuju permintaan perubahan" hint="Permission update_pjp + cakupan tim / cabang.">
+                <Pick value={d.changeApprover} disabled={!ed} onChange={(v) => set({ changeApprover: v })} options={[["spv", "SPV tim"], ["spv_bm", "SPV tim atau BM"]]} w="w-[180px]" />
+              </Row>
+              <Row title="SLA keputusan (jam)" hint="Lewat SLA ditandai merah di tab Permintaan Perubahan.">
+                <Input type="number" className="w-20 text-right" disabled={!ed} value={d.changeRequestSlaHours} onChange={(e) => set({ changeRequestSlaHours: Number(e.target.value) })} />
+              </Row>
+            </>
+          )}
+        </SettingsCard>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Kalender libur & definisi KPI kunjungan</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Libur</TableHead>
+                  <TableHead>Berlaku</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {HOLIDAYS.map((h) => (
+                  <TableRow key={h.date + h.name}>
+                    <TableCell className="whitespace-nowrap text-xs">{fmtDate(h.date)}</TableCell>
+                    <TableCell className="text-xs">{h.name}</TableCell>
+                    <TableCell className="text-xs">{h.branchIds ? h.branchIds.join(", ") : "Nasional (semua cabang)"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <p className="text-[11px] text-muted-foreground">Data contoh. Admin mengisi libur nasional, cuti bersama dan libur daerah per cabang tiap awal tahun (import Excel). Kunjungan di hari libur ditandai di PJP dan diusulkan digeser.</p>
+            <dl className="space-y-2 text-xs">
+              {[
+                ["Call compliance", "Kunjungan rencana selesai (check-in + check-out) ÷ kunjungan rencana. Target ≥ 85%."],
+                ["Effective call", "Kunjungan dengan pesanan ÷ kunjungan aktual."],
+                ["Strike rate", "Outlet unik yang memesan ÷ outlet unik yang dikunjungi dalam periode."],
+                ["Time-in-market", "Check-in pertama s.d. check-out terakhir per hari (jam di pasar)."],
+                ["Coverage", "Outlet aktif yang ada di PJP berlaku ÷ outlet aktif."],
+              ].map(([k, v]) => (
+                <div key={k} className="grid grid-cols-[120px_minmax(0,1fr)] gap-2">
+                  <dt className="font-semibold">{k}</dt>
+                  <dd className="text-muted-foreground">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+
+        <SettingsCard
           title="Opsi default lain"
-          keys={["salesAdminReview", "orderWithoutVisitHQ", "nooOrderBeforeFinance", "minOrder", "geofenceM"]}
-          validate={(d) => (d.geofenceM < 10 || d.geofenceM > 1000 ? "Radius harus antara 10 dan 1000 meter." : null)}
+          keys={["salesAdminReview", "orderWithoutVisitHQ", "nooOrderBeforeFinance", "minOrder"]}
         >
           {(d, set, ed) => (
             <>
@@ -363,9 +634,6 @@ export function SettingsPage() {
               </Row>
               <Row title="Minimum nilai / qty pesanan per customer group" hint="Default mati.">
                 <Switch checked={d.minOrder} disabled={!ed} onChange={(v) => set({ minOrder: v })} />
-              </Row>
-              <Row title="Radius geofence check-in (m)" hint="Flag, bukan blok. Default 100 m.">
-                <Input type="number" className="w-24 text-right" disabled={!ed} value={d.geofenceM} onChange={(e) => set({ geofenceM: Number(e.target.value) })} />
               </Row>
             </>
           )}

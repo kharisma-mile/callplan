@@ -15,6 +15,8 @@ import type {
   OrderStatus,
   PjpChangeRequest,
   PjpEntry,
+  PjpHeader,
+  PjpShift,
   PriceList,
   Product,
   Region,
@@ -322,6 +324,8 @@ export interface AppState {
   auditLog: AuditLogEntry[];
   outlets: Outlet[];
   pjp: PjpEntry[];
+  pjpHeaders: PjpHeader[];
+  pjpShifts: PjpShift[];
   opps: Opportunity[];
   orders: Order[];
   approvals: ApprovalRequest[];
@@ -360,6 +364,8 @@ interface Actions {
   setSettings: (fn: (s: Settings) => Settings) => void;
   setOutlets: (fn: (o: Outlet[]) => Outlet[]) => void;
   setPjp: (fn: (p: PjpEntry[]) => PjpEntry[]) => void;
+  setPjpHeaders: (fn: (p: PjpHeader[]) => PjpHeader[]) => void;
+  setPjpShifts: (fn: (p: PjpShift[]) => PjpShift[]) => void;
   setOpps: (fn: (o: Opportunity[]) => Opportunity[]) => void;
   setOrders: (fn: (o: Order[]) => Order[]) => void;
   setTargets: (fn: (t: AppState["targets"]) => AppState["targets"]) => void;
@@ -399,6 +405,8 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
   const [settings, setSettings] = useState<Settings>(M.DEFAULT_SETTINGS);
   const [outlets, setOutlets] = useState<Outlet[]>(init.current.outlets);
   const [pjp, setPjp] = useState<PjpEntry[]>(M.PJP);
+  const [pjpHeaders, setPjpHeaders] = useState<PjpHeader[]>(M.PJP_HEADERS);
+  const [pjpShifts, setPjpShifts] = useState<PjpShift[]>([]);
   const [opps, setOpps] = useState<Opportunity[]>(init.current.opps);
   const [orders, setOrders] = useState<Order[]>(init.current.orders);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>(init.current.approvals);
@@ -788,6 +796,8 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
     settings,
     outlets,
     pjp,
+    pjpHeaders,
+    pjpShifts,
     opps,
     orders,
     approvals,
@@ -822,6 +832,8 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
     setSettings,
     setOutlets,
     setPjp,
+    setPjpHeaders,
+    setPjpShifts,
     setOpps,
     setOrders,
     setTargets,

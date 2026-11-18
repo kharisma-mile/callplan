@@ -36,9 +36,9 @@ export function UsersPage() {
         title="Pengguna & Role"
         subtitle="Login dan RBAC milik modul. Pengguna disinkronkan dari MileApp; permission mengikuti pola {aksi}_{resource} per halaman + custom permission (approve_*, import_*, export_*)."
       />
-      <div className="flex w-fit gap-1 rounded-md bg-muted p-1">
+      <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-muted p-1">
         {tabs.map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
+          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
             {l}
           </button>
         ))}

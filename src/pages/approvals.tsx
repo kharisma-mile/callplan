@@ -133,7 +133,7 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
         </div>
       )}
 
-      <div className="flex gap-1 rounded-md bg-muted p-1 w-fit">
+      <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-muted p-1">
         {(
           [
             ["pending", `Menunggu (${counts.pending})`],
@@ -141,7 +141,7 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
             ["all", "Semua"],
           ] as const
         ).map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
+          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
             {l}
           </button>
         ))}

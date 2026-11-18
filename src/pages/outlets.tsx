@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Ban, Download, Eye, Info, MapPin, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2, Upload } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { ClassBadge, CustomerBadge, OrderBadge } from "@/components/status-badge
 import { EmptyState } from "@/components/empty-state";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
 import { BRANCHES, CUSTOMER_STATUS_LABEL, PRICE_GROUPS, SALESMEN, nextOutletSeq } from "@/data/mock";
-import type { CustomerStatus, Outlet, OutletClass, Variant } from "@/data/types";
+import type { CustomerStatus, Frequency, Outlet, OutletClass, Variant } from "@/data/types";
 import { Checkbox } from "@/components/switch";
 import { fmtDate, pct, rupiah, rupiahShort } from "@/lib/format";
 import { orderTotal } from "@/lib/approval";
@@ -115,7 +115,18 @@ export function OutletsPage() {
       ),
     [outlets, inScope, status, cls, branch, q, showInactive]
   );
-  const shown = rows.slice(0, 100);
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [status, cls, branch, q, showInactive]);
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const curPage = Math.min(page, pageCount);
+  const offset = (curPage - 1) * PAGE_SIZE;
+  const shown = rows.slice(offset, offset + PAGE_SIZE);
+  const statusCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const o of outlets) if (o.active && inScope(o.salesId)) c[o.status] = (c[o.status] ?? 0) + 1;
+    return c;
+  }, [outlets, inScope]);
   const totalOut = rows.reduce((a, o) => a + o.outstanding, 0);
   const totalOverdue = rows.reduce((a, o) => a + (o.overdueDays > settings.overdueDays ? o.overdue : 0), 0);
 
@@ -177,7 +188,7 @@ export function OutletsPage() {
         }
       />
 
-      <p className="-mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+      <p className="flex items-center gap-1 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5" /> Status pelanggan diturunkan otomatis dari riwayat NOO dan pesanan ({A ? "A: SO ter-invoice di Odoo" : "B: pesanan Selesai di modul"}); arahkan kursor ke status untuk aturannya.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -185,7 +196,7 @@ export function OutletsPage() {
           <Card key={s} className="cursor-pointer" onClick={() => setStatus(status === s ? "all" : s)}>
             <CardContent className={`flex items-center justify-between p-4 ${status === s ? "rounded-lg ring-2 ring-primary" : ""}`}>
               <DerivedStatus s={s} variant={settings.variant} />
-              <span className="text-xl font-bold">{outlets.filter((o) => inScope(o.salesId) && o.active && o.status === s).length}</span>
+              <span className="text-xl font-bold">{statusCounts[s] ?? 0}</span>
             </CardContent>
           </Card>
         ))}
@@ -239,7 +250,7 @@ export function OutletsPage() {
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <Checkbox checked={showInactive} onChange={setShowInactive} /> Tampilkan nonaktif
           </label>
-          <div className="ml-auto flex gap-2 text-xs">
+          <div className="ml-auto flex flex-wrap gap-2 text-xs">
             <Badge variant="neutral">{rows.length} outlet</Badge>
             <Badge variant="info">Piutang {rupiahShort(totalOut)}</Badge>
             <Badge variant="danger">
@@ -263,7 +274,7 @@ export function OutletsPage() {
           <TableBody>
             {shown.map((o, i) => (
               <TableRow key={o.id} className={`cursor-pointer ${o.active ? "" : "opacity-60"}`} onClick={() => setDetail(o)}>
-                <TableCell>{i + 1}</TableCell>
+                <TableCell>{offset + i + 1}</TableCell>
                 <TableCell>
                   <p className="font-medium">
                     {o.name} {!o.active && <Badge variant="neutral">Nonaktif</Badge>}
@@ -335,7 +346,24 @@ export function OutletsPage() {
           </TableBody>
         </Table>
         {rows.length === 0 && <EmptyState title="Data tidak ditemukan" desc="Ubah filter atau kata kunci pencarian." />}
-        {rows.length > 100 && <p className="p-4 text-center text-xs text-muted-foreground">Menampilkan 100 dari {rows.length} outlet</p>}
+        {rows.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-4 text-xs text-muted-foreground">
+            <span>
+              Menampilkan {offset + 1}–{offset + shown.length} dari {rows.length} outlet
+            </span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" disabled={curPage <= 1} onClick={() => setPage(curPage - 1)}>
+                Sebelumnya
+              </Button>
+              <span>
+                Hal. {curPage} / {pageCount}
+              </span>
+              <Button size="sm" variant="outline" disabled={curPage >= pageCount} onClick={() => setPage(curPage + 1)}>
+                Berikutnya
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* detail */}
@@ -396,7 +424,7 @@ export function OutletsPage() {
                   <p className="mb-2 text-sm font-semibold">
                     Ringkasan piutang <span className="font-normal text-muted-foreground">· per {A ? "17 Nov 2026 10:00 (Odoo, sinkron per jam)" : "16 Nov 2026 17:02 (import Finance)"}</span>
                   </p>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {[
                       ["Limit kredit", rupiah(detail.creditLimit)],
                       ["Saldo piutang", rupiah(detail.outstanding)],
@@ -405,7 +433,7 @@ export function OutletsPage() {
                     ].map(([k, v]) => (
                       <div key={k} className="rounded-md bg-muted p-3">
                         <p className="text-xs text-muted-foreground">{k}</p>
-                        <p className="text-sm font-semibold">{v}</p>
+                        <p className="break-words text-sm font-semibold">{v}</p>
                       </div>
                     ))}
                   </div>
@@ -552,7 +580,7 @@ export function OutletsPage() {
                     <SelectContent>
                       <SelectItem value="none">— Belum ada rute —</SelectItem>
                       {routes
-                        .filter((r) => r.branchId === salesOf(edit.salesId).branchId && r.active)
+                        .filter((r) => r.branchId === salesOf(edit.salesId).branchId && r.active && (!r.salesId || r.salesId === edit.salesId))
                         .map((r) => (
                           <SelectItem key={r.id} value={r.id}>
                             {r.code} · {r.name}
@@ -573,6 +601,22 @@ export function OutletsPage() {
                           {c} ({settings.classFreq[c]})
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Frekuensi kunjungan</Label>
+                  <Select value={edit.visitFreq ?? "default"} onValueChange={(v) => setEdit({ ...edit, visitFreq: v === "default" ? undefined : (v as Frequency) })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Ikuti kelas ({settings.classFreq[edit.cls]})</SelectItem>
+                      <SelectItem value="F8">F8 · 2×/minggu (key account)</SelectItem>
+                      <SelectItem value="F12">F12 · 3×/minggu (key account)</SelectItem>
+                      <SelectItem value="F4">F4 · tiap minggu</SelectItem>
+                      <SelectItem value="F2">F2 · 2 minggu sekali</SelectItem>
+                      <SelectItem value="F1">F1 · 1×/4 minggu</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

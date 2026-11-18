@@ -168,20 +168,20 @@ export function TargetsPage() {
       />
 
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex gap-1 rounded-md bg-muted p-1">
+        <div className="flex flex-wrap gap-1 rounded-md bg-muted p-1">
           {DIM_TABS.map(([k, l]) => (
             <button
               key={k}
               disabled={dirty && k !== dim}
               title={dirty && k !== dim ? "Simpan perubahan dulu" : undefined}
               onClick={() => setDim(k)}
-              className={cn("h-[30px] rounded-sm px-3 text-sm font-medium disabled:opacity-50", dim === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}
+              className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium disabled:opacity-50", dim === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}
             >
               {l}
             </button>
           ))}
         </div>
-        <div className="flex gap-1 rounded-md bg-muted p-1" title={qtyAllowed ? undefined : "Qty tidak berlaku untuk dimensi ini"}>
+        <div className="flex flex-wrap gap-1 rounded-md bg-muted p-1" title={qtyAllowed ? undefined : "Qty tidak berlaku untuk dimensi ini"}>
           {(
             [
               ["value", "Nilai (Rp)"],
@@ -192,7 +192,7 @@ export function TargetsPage() {
               key={k}
               disabled={!qtyAllowed && k === "qty"}
               onClick={() => setMeasure(k)}
-              className={cn("h-[30px] rounded-sm px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50", m === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}
+              className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50", m === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}
             >
               {l}
             </button>
