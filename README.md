@@ -43,12 +43,14 @@ src/
   components/             sidebar, topbar, toaster, badges, setup guide, ui/ (shadcn)
 ```
 
-## Demo roles (D-52)
+## Roles and approvals (D-54)
 
-| Role | User | Data scope |
-|---|---|---|
-| Admin | Rina Kusuma | All branches; Integration and Setting |
-| Sales Supervisor | Dewi Lestari | Cabang Surabaya, her own team |
+Everything is decided by the **permissions on the user's role + its data scope** (Filament Shield style); no code checks a role name. Approvals use custom permissions: LOA discount tiers are value bands each linked to a permission (≤ 2% no approval, 2–5% `approve_discount_tier_1`, > 5% `approve_discount_tier_2`; a higher tier may also decide a lower one); special order = `approve_special_order` → `approve_special_order_final`; NOO = `approve_noo` → `approve_noo_credit` (credit limit / TOP / price group); credit override, pipeline stage and PJP = `approve_credit_override`, `approve_pipeline_stage`, `approve_pjp`. A pending step goes to every user whose role holds the step's permission and whose scope covers the request. The two roles below are **seeded demo examples**, freely editable in Setting → Role / Permission:
+
+| Role (seed) | User | Data scope | Approval permissions |
+|---|---|---|---|
+| Admin | Rina Kusuma | All branches | all |
+| Sales Supervisor | Dewi Lestari | Cabang Surabaya, her own team | tier_1, approve_noo, approve_special_order, approve_credit_override, approve_pipeline_stage |
 
 No login screen: switch with **Ganti role (demo)** in the user menu (top right).
 
@@ -57,14 +59,14 @@ No login screen: switch with **Ganti role (demo)** in the user menu (top right).
 1. **Sales Supervisor (Dewi).** The sidebar has no Integration / Setting. The dashboard shows targets, visits vs plan, pipeline, *Request menunggu Anda* (click to open the Request page) and the **Alur Setup Sales Operations** checklist.
 2. **Outlet / Pelanggan.** Status cards are derived (Pelanggan Baru / Lama – sudah beli / Lama – belum beli). No class, no frequency on the outlet (D-48); optional **Hari kunjungan** (D-51). Typing an existing name or phone in *Buat Outlet* opens **Kemungkinan Duplikat**.
 3. **PJP / Call Plan.** Pick a Surabaya salesman: week view (Senin–Sabtu, 10–15 visits/day in route order, capacity badge). Drag cards between days or salesmen; frequency per entry is **F1 / F2 / F4** only (D-47; more than weekly = F4 + extra call). Days when the outlet is closed show "Outlet tutup" as a warning, not a block (D-51). Try *Generate otomatis*, *Import*, *Export*, *Salin ke siklus berikutnya*, the holiday shift, and the tabs *Cakupan & Beban*, *Eksekusi*, *Permintaan Perubahan*.
-4. **Publish (D-53).** Default: no PJP approval. The Sales Supervisor clicks **Publish ke Mile Field** on a Draft (Draft → Dipublikasikan); the week's visit tasks are created in route order. A published PJP is locked; changes create a new Draft version. Optional: Admin enables **PJP perlu approval Admin sebelum publish** in Pengaturan; then *Ajukan Approval* → Admin decides in the **Approval PJP** tab → Publish only for Disetujui.
+4. **Publish (D-53).** Default: no PJP approval. The Sales Supervisor clicks **Publish ke Mile Field** on a Draft (Draft → Dipublikasikan); the week's visit tasks are created in route order. A published PJP is locked; changes create a new Draft version. Optional: enable **PJP perlu approval sebelum publish (pemegang approve_pjp)** in Pengaturan; then *Ajukan Approval* → a holder of `approve_pjp` decides in the **Approval PJP** tab → Publish only for Disetujui.
 5. **Plotting Pelanggan / Assortment Produk.** Move outlets between salesmen (they enter the target PJP as Draft); assortment per segment with must-sell flags and per-outlet exceptions.
-6. **Pipeline.** Mark an opportunity **Batal** with a reason: it waits for Sales Supervisor approval under **Request → Tahap Pipeline**.
-7. **Request → LOA.** One page for discount, special order and credit-limit requests. Dewi decides within her tier (discount ≤ 5%); above that the request goes to Admin. Rejecting an order's discount rejects the order.
-8. **Request → New Customer.** Dewi verifies the data (step 1); Admin sets credit limit, TOP and price group (step 2).
+6. **Pipeline.** Mark an opportunity **Batal** with a reason: it waits for a holder of `approve_pipeline_stage` under **Request → Tahap Pipeline**.
+7. **Request → LOA.** One page for discount, special order and credit-limit requests. Dewi holds `approve_discount_tier_1` (2–5%); above 5% only holders of `approve_discount_tier_2` (seed: Admin) see Setujui. Rejecting an order's discount rejects the order.
+8. **Request → New Customer.** Step 1 `approve_noo` verifies the data (Dewi); step 2 `approve_noo_credit` sets credit limit, TOP and price group (seed: Admin).
 9. **Review Pesanan.** Orders with failed checks go to approval automatically, then back to *Menunggu Review*. Edit qty / price / items (reason logged). *Simulasi pesanan masuk* makes the NOO opportunity **Menang**. Variant A: *Konfirmasi & Kirim ke Odoo* → *Baca status dari Odoo*; Variant B: *Dikonfirmasi → Diproses → Selesai*.
 10. **Admin (Rina) → Setting → Pengaturan.** Each card saves on its own (*Riwayat perubahan*). Switch **Varian A / B**: Integration shows *Sinkronisasi Odoo* or *Import & Export Excel*.
-11. **Setting → Users / Role / Permission / Audit Log.** *Sinkronkan dari MileApp* adds users without a role; create / duplicate roles; untick `approve_discount` for Sales Supervisor in **Permission** and the buttons disappear for Dewi; **Audit Log** lists user / role / setting changes.
+11. **Setting → Users / Role / Permission / Audit Log.** *Sinkronkan dari MileApp* adds users without a role; create / duplicate roles; untick `approve_discount_tier_1` (or tick `approve_discount_tier_2`) for Sales Supervisor in **Permission** and Dewi's Setujui buttons change at once; **Audit Log** lists user / role / setting changes.
 12. **Report → Laporan.** Standard reports with simulated Excel export.
 
 ## GitHub Pages
@@ -77,7 +79,7 @@ No login screen: switch with **Ganti role (demo)** in the user menu (top right).
 ## Notes / limits
 
 - Mockup only: no authentication, no persistence, no real Odoo or MileApp calls. All toasts and sync states are simulated.
-- The LOA tiers (Sales 2%, Sales Supervisor 5%, Admin above), the 30-day overdue rule, the 24-hour SLA, the default frequency F2, the 12 / 15 calls-per-day capacity and the dummy holidays are example values proposed by MileApp. UP sets the final numbers.
+- The LOA tiers (2% without approval, 5% tier 1, tier 2 above), the 30-day overdue rule, the 24-hour SLA, the default frequency F2, the 12 / 15 calls-per-day capacity and the dummy holidays are example values proposed by MileApp. UP sets the final numbers.
 - Order numbers follow `SO-<branch>-<yyyymm>-<seq>`; the Mile Field client order id (`MF-ORD-…`) is shown only as a reference.
 - The duplicate check compares NPWP, phone, and similar names in the same city (a stand-in for the 50 m GPS radius).
 - The production stack for delivery remains Laravel + Inertia React + shadcn with `spatie/laravel-permission` and a per-resource permission generator.

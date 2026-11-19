@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import { Copy, Download, Lock, MoreHorizontal, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Copy, Download, MoreHorizontal, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { EmptyState } from "@/components/empty-state";
 import { Checkbox, Switch } from "@/components/switch";
 import { useApp, branchOf } from "@/store/app-store";
-import { CRUD, RESOURCES, SCOPE_LABEL, defaultPermissions } from "@/lib/rbac";
+import { CRUD, SCOPE_LABEL, defaultPermissions, resourcesFor } from "@/lib/rbac";
 import type { ModuleUser, RoleDef, ScopeType } from "@/data/types";
 import { fmtDate, nowStamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ const NONE = "__none__";
 export function UsersPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Users" subtitle="Pengguna masuk lewat MileApp (tanpa login modul) dan disinkronkan dari MileApp; di sini Admin menetapkan role dan mengunci akun." />
+      <PageHeader title="Users" subtitle="Pengguna masuk lewat MileApp (tanpa login modul) dan disinkronkan dari MileApp; di sini pemegang update_user menetapkan role dan mengunci akun." />
       <UsersTab />
     </div>
   );
@@ -34,7 +34,7 @@ export function UsersPage() {
 export function RolesPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Role" subtitle="RBAC milik modul: role bawaan (Admin, Sales Supervisor) dan role tambahan dengan cakupan data (semua cabang, cabang sendiri, tim sendiri)." />
+      <PageHeader title="Role" subtitle="RBAC milik modul (Shield): akses dan approval ditentukan permission role + cakupan data (semua cabang, cabang sendiri, tim sendiri). Admin dan Sales Supervisor = contoh role seed demo." />
       <RolesTab />
     </div>
   );
@@ -185,7 +185,7 @@ function UsersTab() {
                     <span>{roleMeta(u.role).label}</span>
                   )}
                   {!u.role && (
-                    <Badge variant="warning" title="Tidak ada akses sampai Admin menetapkan role">
+                    <Badge variant="warning" title="Tidak ada akses sampai role ditetapkan">
                       Tanpa role
                     </Badge>
                   )}
@@ -292,14 +292,12 @@ function RolesTab() {
       )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {roles.map((r) => {
-          const locked = r.key === "admin";
-          const showMenu = !locked && (can("update_role") || can("create_role") || (can("delete_role") && !r.builtin));
+          const showMenu = can("update_role") || can("create_role") || (can("delete_role") && !r.builtin);
           return (
             <Card key={r.key}>
               <CardContent className="space-y-2 p-4">
                 <div className="flex items-center justify-between gap-2">
                   <p className="flex items-center gap-1 font-semibold">
-                    {locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                     {r.label}
                   </p>
                   <div className="flex items-center gap-1">
@@ -457,21 +455,26 @@ function RolesTab() {
 
 /* ---------------- Permission matrix ---------------- */
 function MatrixTab() {
-  const { permissions, setPermissions, can, session, toast, roles, roleMeta, addAudit } = useApp();
-  const [role, setRole] = useState<string>(session.role === "admin" ? "spv" : session.role);
+  const { permissions, setPermissions, can, session, toast, roles, roleMeta, addAudit, settings } = useApp();
+  const [role, setRole] = useState<string>(session.role);
   const meta = roleMeta(role);
-  const editable = can("update_role") && role !== "admin";
+  const editable = can("update_role");
   const perms = new Set(permissions[role] ?? []);
+  /** D-54 (Shield): approval permissions (incl. LOA tiers from Setting) live in their page group; checking them changes who can approve immediately. */
+  const RESOURCES = resourcesFor(settings.loa);
   const groups = Array.from(new Set(RESOURCES.map((r) => r.group)));
+  /** Lock-out guard: the role you are using keeps access to this page. */
+  const guarded = (perm: string) => role === session.role && (perm === "view_any_role" || perm === "update_role");
   const colCount = 3 + CRUD.length;
 
   const toggle = (perm: string, on: boolean) => {
+    if (!on && guarded(perm)) return toast({ tone: "warning", title: `${perm} tidak dapat dicabut dari role Anda sendiri`, desc: "Mencegah lock-out dari halaman Role" });
     setPermissions((p) => ({ ...p, [role]: on ? [...(p[role] ?? []), perm] : (p[role] ?? []).filter((x) => x !== perm) }));
     addAudit({ module: "Role", action: "Permission diubah", target: meta.label, detail: `${on ? "+" : "-"} ${perm}` });
     if (role === session.role) toast({ tone: on ? "success" : "warning", title: `${perm} ${on ? "diberikan" : "dicabut"}`, desc: "Berlaku langsung untuk role Anda saat ini" });
   };
   const rowAll = (names: string[], on: boolean) => {
-    setPermissions((p) => ({ ...p, [role]: on ? Array.from(new Set([...(p[role] ?? []), ...names])) : (p[role] ?? []).filter((x) => !names.includes(x)) }));
+    setPermissions((p) => ({ ...p, [role]: on ? Array.from(new Set([...(p[role] ?? []), ...names])) : (p[role] ?? []).filter((x) => !names.includes(x) || guarded(x)) }));
     addAudit({ module: "Role", action: "Permission diubah", target: meta.label, detail: `${on ? "+" : "-"} ${names.join(", ")}` });
   };
 
@@ -484,7 +487,6 @@ function MatrixTab() {
             onClick={() => setRole(r.key)}
             className={cn("flex h-[31px] items-center gap-1 rounded-md border px-3 text-sm", role === r.key ? "border-primary bg-accent text-[#016C9D]" : "border-border bg-background text-foreground hover:bg-muted")}
           >
-            {r.key === "admin" && <Lock className="h-3.5 w-3.5" />}
             {r.label}
             {r.key === session.role && <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] text-white">Anda</span>}
           </button>
@@ -505,8 +507,10 @@ function MatrixTab() {
           </Button>
         )}
       </div>
-      {role === "admin" && <p className="text-xs text-muted-foreground">Role Admin dikunci (super admin) agar tidak terjadi lock-out.</p>}
-      {role === session.role && role !== "admin" && (
+      <p className="text-xs text-muted-foreground">
+        Semua akses dan approval ditentukan permission role + cakupan data. Admin dan Sales Supervisor hanya contoh role (seed demo). Permission <code className="font-mono">approve_*</code> di grup Request / Sales Operation menentukan siapa yang dapat menyetujui tiap tier / langkah.
+      </p>
+      {role === session.role && (
         <p className="rounded-md border border-[#9FE1FE] bg-[#E6F7FF] p-2 text-xs text-[#01496A]">Ini role Anda saat ini: perubahan langsung terlihat di sidebar, tombol, dan halaman.</p>
       )}
 

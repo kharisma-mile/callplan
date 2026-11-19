@@ -33,7 +33,7 @@ import type {
   Toast,
 } from "@/data/types";
 import { APPROVAL_META, ROLE_META, ROLE_ORDER, defaultPermissions } from "@/lib/rbac";
-import { buildSteps, checkOrder, orderTotal } from "@/lib/approval";
+import { buildSteps, checkOrder, orderTotal, stepPerms, stepTitle } from "@/lib/approval";
 import { nowStamp, rupiah } from "@/lib/format";
 import { weeksFor } from "@/data/pjp-engine";
 
@@ -253,7 +253,7 @@ function seedApprovals(orders: Order[], opps: Opportunity[], settings: Settings)
   cr(sby2[1].id, "2026-11-17 09:30");
   cr(jkt[2].id, "2026-11-16 16:45", 1);
 
-  // NOO: registered from Mile Field at Prospek → prospect outlet (Pelanggan Baru) + NOO request Sales Supervisor → Admin
+  // NOO: registered from Mile Field at Prospek → prospect outlet (Pelanggan Baru) + NOO request (approve_noo → approve_noo_credit)
   const noo = (opp: Opportunity, at: string, spvDone?: string) => {
     const outlet = nooOutletFor(opp);
     opp.outletId = outlet.id;
@@ -315,7 +315,7 @@ interface Session {
 /** Default persona when opened from MileApp: Sales Supervisor Dewi Lestari (Cabang Surabaya · Tim Dewi). */
 const DEFAULT_USER_ID = "U4";
 
-const NO_ROLE: RoleDef = { key: "", label: "Tanpa role", scope: "team", scopeLabel: "Tidak ada akses", desc: "Belum ditetapkan Admin", builtin: false };
+const NO_ROLE: RoleDef = { key: "", label: "Tanpa role", scope: "team", scopeLabel: "Tidak ada akses", desc: "Belum ada role (ditetapkan pemegang update_user)", builtin: false };
 
 export interface AppState {
   session: Session;
@@ -455,7 +455,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([
     { at: "2026-11-17 06:00", by: "Sistem", module: "Pengguna", action: "Sinkron pengguna MileApp", target: "Semua", detail: "0 pengguna baru, 0 dinonaktifkan" },
     { at: "2026-11-16 15:12", by: "Rina Kusuma", module: "Role", action: "Permission diubah", target: "Sales Supervisor", detail: "+ approve_pipeline_stage" },
-    { at: "2026-11-14 10:03", by: "Rina Kusuma", module: "Pengaturan", action: "Pengaturan disimpan", target: "Tier LOA diskon", detail: "Sales Supervisor 4% → 5%" },
+    { at: "2026-11-14 10:03", by: "Rina Kusuma", module: "Pengaturan", action: "Pengaturan disimpan", target: "Tier LOA diskon", detail: "Tier 1 (approve_discount_tier_1) 4% → 5%" },
   ]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [assortments, setAssortments] = useState<Assortment[]>(M.ASSORTMENTS);
@@ -505,11 +505,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const canActOnStep = useCallback(
     (a: ApprovalRequest) => {
       if (a.status !== "pending") return false;
-      if (!can(APPROVAL_META[a.type].perm)) return false;
+      // D-54: role holds the pending step's permission AND the data scope covers the request
       const step = a.steps.find((s) => s.status === "pending");
-      return !!step && (step.roles as string[]).includes(session.role);
+      return !!step && stepPerms(step).some(can) && inScope(a.salesId);
     },
-    [session, can]
+    [can, inScope]
   );
 
   const createApproval = useCallback(
@@ -715,14 +715,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         by: user.name,
         role: roleMeta(session.role).label,
         action: approve ? (status === "approved" ? "Disetujui (final)" : `Disetujui (tahap ${idx + 1})`) : "Ditolak",
-        permission: APPROVAL_META[a.type].perm,
+        permission: stepPerms(a.steps[idx]).find(can) ?? a.steps[idx].permission,
         reason:
           reason +
           (extra?.nooCredit ? `${reason ? " · " : ""}Limit ${rupiah(extra.nooCredit.limit)}, TOP ${extra.nooCredit.top} hari, price group ${extra.nooCredit.priceGroup}` : ""),
       };
       const next: ApprovalRequest = { ...a, steps, status, audit: [...a.audit, entry], nooCredit: extra?.nooCredit ?? a.nooCredit };
       if (extra?.nooCredit)
-        next.details = [...a.details.filter((d) => d.label !== "Ditetapkan Admin"), { label: "Ditetapkan Admin", value: `${rupiah(extra.nooCredit.limit)} · TOP ${extra.nooCredit.top} hari · ${extra.nooCredit.priceGroup}` }];
+        next.details = [...a.details.filter((d) => d.label !== "Kredit ditetapkan"), { label: "Kredit ditetapkan", value: `${rupiah(extra.nooCredit.limit)} · TOP ${extra.nooCredit.top} hari · ${extra.nooCredit.priceGroup}` }];
       setApprovals((list) => list.map((x) => (x.id === id ? next : x)));
       if (status !== "pending") onFinal(next, status === "approved", reason, user.name);
       if (status === "approved" && a.type === "noo") {
@@ -737,12 +737,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else {
         toast({
           tone: approve ? "success" : "danger",
-          title: approve ? (status === "approved" ? "Request disetujui" : `Tahap ${idx + 1} disetujui, diteruskan ke ${steps[idx + 1]?.label}`) : "Permintaan ditolak",
+          title: approve ? (status === "approved" ? "Request disetujui" : `Langkah ${idx + 1} disetujui, diteruskan ke ${stepTitle(steps, idx + 1)} (pemegang ${steps[idx + 1]?.permission})`) : "Permintaan ditolak",
           desc: `${a.no} · ${a.title}${!approve && a.orderId ? " · pesanan ikut ditolak" : ""}`,
         });
       }
     },
-    [session, user, approvals, onFinal, toast, settings.variant, roleMeta]
+    [session, user, approvals, onFinal, toast, settings.variant, roleMeta, can]
   );
 
   const moveOpp = useCallback(
@@ -755,7 +755,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setOpps((list) =>
           list.map((o) =>
             o.id === oppId
-              ? { ...o, pendingStage: stage, batalReason: batalReason ?? o.batalReason, log: [...o.log, { at: stamp, by: user.name, text: `Minta pindah ke ${stage}${batalReason ? ` (alasan: ${batalReason})` : ""} — menunggu approval SPV` }] }
+              ? { ...o, pendingStage: stage, batalReason: batalReason ?? o.batalReason, log: [...o.log, { at: stamp, by: user.name, text: `Minta pindah ke ${stage}${batalReason ? ` (alasan: ${batalReason})` : ""} — menunggu approval (approve_pipeline_stage)` }] }
               : o
           )
         );
@@ -768,7 +768,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           toStage: stage,
           details: [{ label: "Jenis peluang", value: opp.type }, ...(batalReason ? [{ label: "Alasan batal", value: batalReason }] : [])],
         });
-        toast({ tone: "info", title: "Menunggu approval tahap", desc: `Perpindahan ke "${stage}" dikirim ke Request › Pipeline (Sales Supervisor).` });
+        toast({ tone: "info", title: "Menunggu approval tahap", desc: `Perpindahan ke "${stage}" dikirim ke Request › Pipeline (pemegang approve_pipeline_stage).` });
         return;
       }
       setOpps((list) =>
@@ -788,7 +788,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [opps, user, settings.pipelineStageApproval, settings.pipelineBatalApproval, createApproval, toast]
   );
 
-  /** Module 05 FR-005 / 16: an NOO opportunity is registered at Prospek → prospect outlet + NOO request (Sales Supervisor → Admin). */
+  /** Module 05 FR-005 / 16: an NOO opportunity is registered at Prospek → prospect outlet + NOO request (approve_noo → approve_noo_credit). */
   const createOpp = useCallback(
     (opp: Opportunity) => {
       if (opp.type !== "Pelanggan Baru (NOO)") {
@@ -799,7 +799,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const fresh: Outlet[] = [];
       const outlet = nooOutletFor(opp, fresh);
       setOutlets((l) => [outlet, ...l]);
-      setOpps((l) => [{ ...opp, outletId: outlet.id, log: [...opp.log, { at: nowStamp(), by: "Sistem", text: "NOO dibuat di tahap Prospek → request ke Sales Supervisor (data) lalu Admin (kredit)" }] }, ...l]);
+      setOpps((l) => [{ ...opp, outletId: outlet.id, log: [...opp.log, { at: nowStamp(), by: "Sistem", text: "NOO dibuat di tahap Prospek → request: verifikasi data (approve_noo) lalu kredit pelanggan (approve_noo_credit)" }] }, ...l]);
       createApproval("noo", {
         title: `Pelanggan baru: ${opp.name}`,
         salesId: opp.salesId,
@@ -809,7 +809,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         outletId: outlet.id,
         details: nooDetails(opp),
       });
-      toast({ tone: "success", title: "Peluang + NOO dibuat", desc: `${opp.name} · outlet prospek ${outlet.code} (Pelanggan Baru) · Request NOO: Sales Supervisor → Admin` });
+      toast({ tone: "success", title: "Peluang + NOO dibuat", desc: `${opp.name} · outlet prospek ${outlet.code} (Pelanggan Baru) · Request NOO: approve_noo → approve_noo_credit` });
     },
     [createApproval, toast]
   );

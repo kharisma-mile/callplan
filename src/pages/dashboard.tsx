@@ -35,9 +35,10 @@ function Bar({ label, sub, actual, target, tone = "primary" }: { label: string; 
 
 export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void }) {
   const { user, scopeSalesIds, inScope, targets, opps, approvals, orders, canActOnStep, scopeLabel, roleMeta, can } = useApp();
-  const showOverdue = user!.role === "spv";
   const role = user!.role;
   const scope = roleMeta(role).scope;
+  /** Team-scoped roles see follow-ups; wider scopes see the order review queue (data scope, not role name). */
+  const showOverdue = scope === "team";
 
   const data = useMemo(() => {
     const salesT = targets.sales.filter((t) => t.month === CURRENT_MONTH && inScope(t.key));

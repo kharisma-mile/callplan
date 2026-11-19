@@ -14,7 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ApprovalBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
-import { APPROVAL_META, REQUEST_PAGES, ROLE_META, type RequestPage } from "@/lib/rbac";
+import { APPROVAL_META, REQUEST_PAGES, rolesHolding, type RequestPage } from "@/lib/rbac";
+import { approvalPerms, loaBand, stepApproverText, stepPerms, stepTitle } from "@/lib/approval";
 import type { ApprovalRequest, ApprovalType } from "@/data/types";
 import { fmtDate, nowStamp, rupiah } from "@/lib/format";
 
@@ -38,7 +39,10 @@ function StepTimeline({ a }: { a: ApprovalRequest }) {
               )}
             >
               <Icon className="h-3.5 w-3.5" />
-              <span className="font-medium">{s.label}</span>
+              <span className="font-medium" title={stepApproverText(s)}>
+                {stepTitle(a.steps, i)}
+              </span>
+              <span className="font-mono text-[10px] opacity-80">({s.permission})</span>
               {s.by && <span>· {s.by}</span>}
             </div>
             {i < a.steps.length - 1 && <span className="text-muted-foreground">→</span>}
@@ -51,7 +55,7 @@ function StepTimeline({ a }: { a: ApprovalRequest }) {
 
 /** D-52 Request pages: LOA (discount + special order + credit override, filter by type), New Customer (NOO), Pipeline. */
 export function ApprovalPage({ page }: { page: RequestPage }) {
-  const { approvals, inScope, can, canActOnStep, decideApproval, settings, session, orders, opps } = useApp();
+  const { approvals, inScope, can, canActOnStep, decideApproval, settings, orders, opps, permissions, roles } = useApp();
   const def = REQUEST_PAGES[page];
   const [typeFilter, setTypeFilter] = useState<ApprovalType | "all">("all");
   const types = useMemo(() => (typeFilter === "all" ? def.types : [typeFilter]), [typeFilter, def]);
@@ -59,10 +63,11 @@ export function ApprovalPage({ page }: { page: RequestPage }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ id: string; approve: boolean; reason: string; limit?: number; top?: number; priceGroup?: string } | null>(null);
   const decA = decision ? approvals.find((a) => a.id === decision.id) : undefined;
-  /** NOO step 2 (Admin) must set credit limit, TOP and price group before approving (module 06 FR-010). */
-  const needsCredit = !!decision?.approve && decA?.type === "noo" && decA.steps.findIndex((s) => s.status === "pending") === 1;
+  const decStep = decA?.steps.find((s) => s.status === "pending");
+  /** NOO step approve_noo_credit must set credit limit, TOP and price group before approving (module 06 FR-010). */
+  const needsCredit = !!decision?.approve && decA?.type === "noo" && decStep?.permission === "approve_noo_credit";
   const lateSla = (a: ApprovalRequest) => a.status === "pending" && hoursSince(a.createdAt) > settings.slaHours;
-  const perms = types.map((t) => APPROVAL_META[t].perm);
+  const perms = Array.from(new Set(types.flatMap((t) => approvalPerms(t, settings))));
   const hasApprove = perms.some(can);
   const visible = useMemo(() => approvals.filter((a) => types.includes(a.type) && inScope(a.salesId)), [approvals, types, inScope]);
 
@@ -94,9 +99,12 @@ export function ApprovalPage({ page }: { page: RequestPage }) {
         </div>
       );
     const step = a.steps.find((s) => s.status === "pending");
+    if (!step) return null;
+    const holders = rolesHolding(step.permission, permissions, roles);
     return (
-      <span className="text-xs text-muted-foreground">
-        {!can(APPROVAL_META[a.type].perm) ? `Butuh ${APPROVAL_META[a.type].perm}` : `Menunggu ${ROLE_META[step?.roles.find((r) => r !== "admin") ?? "admin"].label}`}
+      <span className="text-xs text-muted-foreground" title={stepApproverText(step)}>
+        Menunggu pemegang <code className="font-mono">{step.permission}</code>
+        {holders.length > 0 && <span className="block">contoh role: {holders.join(", ")}</span>}
       </span>
     );
   };
@@ -132,16 +140,14 @@ export function ApprovalPage({ page }: { page: RequestPage }) {
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-4 text-sm">
             <span className="mr-2 font-semibold">Tier LOA aktif:</span>
-            {settings.loa.map((t, i) => {
-              const prev = i === 0 ? 0 : settings.loa[i - 1].max ?? 0;
-              return (
-                <Badge key={t.role} variant={session.role === t.role ? "default" : "info"}>
-                  {t.label}: {t.max === null ? `> ${prev}%` : i === 0 ? `≤ ${t.max}%` : `${prev}–${t.max}%`}
-                </Badge>
-              );
-            })}
+            {settings.loa.map((t, i) => (
+              <Badge key={t.label + i} variant={t.permission && can(t.permission) ? "default" : "info"} title={t.permission ? `Penyetuju: pemegang permission ${t.permission}` : "Sales boleh memberi tanpa approval"}>
+                {t.label} {loaBand(settings.loa, i)}
+                {t.permission ? <span className="ml-1 font-mono text-[10px]">({t.permission})</span> : ""}
+              </Badge>
+            ))}
             <span className="text-xs text-muted-foreground">
-              (contoh, angka final ditetapkan UP · ubah di Pengaturan) · {settings.discountTierMode === "single" ? "langsung ke satu tier yang mencakup; atasan boleh memutuskan" : "berurutan melalui setiap tier"} · menolak diskon = pesanan ditolak
+              (contoh, angka final ditetapkan UP · ubah di Pengaturan) · {settings.discountTierMode === "single" ? "langsung ke satu tier yang mencakup; pemegang permission tier di atasnya juga boleh memutuskan" : "berurutan melalui setiap tier"} · menolak diskon = pesanan ditolak
             </span>
           </CardContent>
         </Card>
@@ -256,6 +262,14 @@ export function ApprovalPage({ page }: { page: RequestPage }) {
                 <div>
                   <p className="mb-2 text-sm font-semibold">Alur approval</p>
                   <StepTimeline a={open} />
+                  <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+                    {open.steps.map((s, i) => (
+                      <li key={i}>
+                        {stepTitle(open.steps, i)} — {stepApproverText(s)}
+                        {rolesHolding(s.permission, permissions, roles).length > 0 && ` · dipegang role: ${rolesHolding(s.permission, permissions, roles).join(", ")}`}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
                 <div>
                   <p className="mb-2 text-sm font-semibold">Audit trail</p>
@@ -335,11 +349,11 @@ export function ApprovalPage({ page }: { page: RequestPage }) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <p className="col-span-3 text-xs text-[#01496A]">Wajib diisi Admin sebelum menyetujui. Nilai ini dipakai saat pelanggan diaktifkan{settings.variant === "A" ? " dan dibuat di Odoo (res.partner)" : ""}.</p>
+                  <p className="col-span-3 text-xs text-[#01496A]">Wajib diisi pada langkah approve_noo_credit sebelum menyetujui. Nilai ini dipakai saat pelanggan diaktifkan{settings.variant === "A" ? " dan dibuat di Odoo (res.partner)" : ""}.</p>
                 </div>
               )}
               {!decision.approve && decA?.orderId && <p className="text-xs text-[#BF2130]">Menolak permintaan ini membuat pesanan terkait berstatus Ditolak.</p>}
-              <p className="text-xs text-muted-foreground">Keputusan dicatat dengan pengguna, permission ({decA ? APPROVAL_META[decA.type].perm : ""}), waktu dan alasan.</p>
+              <p className="text-xs text-muted-foreground">Keputusan dicatat dengan pengguna, permission ({decStep ? stepPerms(decStep).find(can) ?? decStep.permission : ""}), waktu dan alasan.</p>
             </div>
           )}
           <DialogFooter>

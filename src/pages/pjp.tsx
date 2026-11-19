@@ -55,7 +55,7 @@ export function PjpPage() {
   const [cycle, setCycle] = useState(0);
   const [week, setWeek] = useState<number | "all">(CURRENT_WEEK);
   const [tabSel, setTab] = useState<Tab>("plan");
-  /** D-53: PJP approval is optional (default off) — SPV publishes its own team's PJP directly. */
+  /** D-53/D-54: PJP approval is optional (default off) — holders of publish_pjp publish directly; when on, holders of approve_pjp approve. */
   const approvalOn = baseSettings.pjpApprovalRequired;
   const tab: Tab = tabSel === "approval" && !approvalOn ? "plan" : tabSel;
   const [q, setQ] = useState("");
@@ -77,14 +77,13 @@ export function PjpPage() {
   const header = pjpHeaders.find((h) => h.salesId === salesId);
   /** Capacity by channel (HQ key account vs branch). */
   const settings = useMemo(() => withCapacity(baseSettings, s?.branchId), [baseSettings, s?.branchId]);
-  /** Lock after publish: only SPV / Admin with "SPV edit langsung" change a published PJP directly; others go through a change request. */
-  const role = app.session.role;
-  const bypass = settings.spvEditPjpDirect && (role === "spv" || role === "admin");
+  /** Lock after publish: with "edit PJP terbit langsung" on, holders of update_pjp change a published PJP directly; others go through a change request. */
+  const bypass = settings.spvEditPjpDirect && can("update_pjp");
   const pendingLock = approvalOn && header?.status === "Menunggu Approval";
   /** Status as shown: with approval off, unpublished states collapse to Draft. */
   const shownStatus = header && !approvalOn && header.status !== "Dipublikasikan" ? "Draft" : header?.status;
   const locked = pendingLock || (settings.lockAfterPublish && header?.status === "Dipublikasikan" && !bypass);
-  /** D-53: when PJP approval is on, the approver is always Admin (approve_pjp, Admin-only by default). */
+  /** D-54: when PJP approval is on, any holder of approve_pjp whose data scope covers the salesman approves. */
   const canApprovePjp = can("approve_pjp");
   const pendingPjps = pjpHeaders.filter((h) => h.status === "Menunggu Approval" && inScope(h.salesId));
   const canApprove = can("update_pjp");
@@ -99,7 +98,7 @@ export function PjpPage() {
   /** Version shown: entries valid on the Monday of the selected week (or today / cycle start for the summary view). */
   const refDate = week === "all" || tab === "coverage" || tab === "exec" ? (cycle === 0 ? TODAY : cStart) : cycleDate(week, 0, cycle);
   const entries = useMemo(() => pjp.filter((e) => e.salesId === salesId && validOn(e, refDate)).sort((a, b) => a.seq - b.seq), [pjp, salesId, refDate]);
-  /** D-53: approval off → SPV publishes a Draft directly; approval on → only a Disetujui PJP can be published. */
+  /** D-53: approval off → holders of publish_pjp publish a Draft directly; approval on → only a Disetujui PJP can be published. */
   const canPublishNow = approvalOn ? header?.status === "Disetujui" : shownStatus === "Draft" && entries.length > 0;
   const weekOf = (date: string) => cyclePos(date, cycle)?.week;
   const matrix = useMemo(() => loadMatrix(entries), [entries]);
@@ -121,9 +120,9 @@ export function PjpPage() {
     );
   const closedConflicts = useMemo(() => entries.filter((e) => isClosedOn(outletMap.get(e.outletId), e.day)).length, [entries, outletMap]);
   const submitApproval = () => {
-    setPjpHeaders((hs) => hs.map((h) => (h.salesId === salesId ? { ...h, status: "Menunggu Approval", submittedBy: user?.name, submittedAt: nowStamp(), rejectReason: undefined, note: `Diajukan ${user?.name ?? ""}, menunggu Admin` } : h)));
-    addAudit({ module: "PJP", action: "PJP diajukan untuk approval", target: s.name, detail: `Versi ${header?.version} · penyetuju Admin (update_pjp)` });
-    toast({ tone: "success", title: "PJP diajukan untuk approval", desc: `${s.name} · versi ${header?.version} menunggu Admin. PJP terkunci sampai diputuskan.` });
+    setPjpHeaders((hs) => hs.map((h) => (h.salesId === salesId ? { ...h, status: "Menunggu Approval", submittedBy: user?.name, submittedAt: nowStamp(), rejectReason: undefined, note: `Diajukan ${user?.name ?? ""}, menunggu pemegang approve_pjp` } : h)));
+    addAudit({ module: "PJP", action: "PJP diajukan untuk approval", target: s.name, detail: `Versi ${header?.version} · penyetuju: pemegang approve_pjp` });
+    toast({ tone: "success", title: "PJP diajukan untuk approval", desc: `${s.name} · versi ${header?.version} menunggu pemegang approve_pjp. PJP terkunci sampai diputuskan.` });
     if (closedConflicts) toast({ tone: "warning", title: `${closedConflicts} kunjungan di hari outlet tutup`, desc: "PJP tetap diajukan. Penyetuju akan melihat peringatan ini; pindahkan harinya bila perlu." });
   };
   const approvePjp = (id: string) => {
@@ -509,8 +508,8 @@ export function PjpPage() {
         <p className="flex items-start gap-2 rounded-md border border-[#F5D77A] bg-[#FFF4D1] px-3 py-2 text-xs text-[#6B5000]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {pendingLock
-            ? `PJP menunggu approval Admin dan terkunci sampai diputuskan.`
-            : `PJP sudah dipublikasikan dan terkunci. Perubahan diajukan lewat tab Permintaan Perubahan (diputuskan Sales Supervisor); hasilnya menjadi versi Draft baru yang ${approvalOn ? `perlu approval Admin sebelum publish` : "dipublikasikan ulang oleh Sales Supervisor"}.`}
+            ? `PJP menunggu approval (pemegang approve_pjp) dan terkunci sampai diputuskan.`
+            : `PJP sudah dipublikasikan dan terkunci. Perubahan diajukan lewat tab Permintaan Perubahan (diputuskan pemegang update_pjp); hasilnya menjadi versi Draft baru yang ${approvalOn ? `perlu approval pemegang approve_pjp sebelum publish` : "dipublikasikan ulang oleh pemegang publish_pjp"}.`}
         </p>
       )}
 
@@ -518,7 +517,7 @@ export function PjpPage() {
         <Card>
           <CardContent className="space-y-1 p-4 text-xs text-muted-foreground">
             <p>
-              Alur: Draft → Menunggu Approval → Disetujui → Dipublikasikan. Penyetuju: <b>Admin</b> (permission <code className="font-mono">approve_pjp</code>, aktif lewat Pengaturan). Publish hanya untuk PJP Disetujui.
+              Alur: Draft → Menunggu Approval → Disetujui → Dipublikasikan. Penyetuju: pemegang permission <code className="font-mono">approve_pjp</code> dalam cakupan datanya (approval aktif lewat Pengaturan). Publish hanya untuk PJP Disetujui.
             </p>
           </CardContent>
           <Table>
@@ -572,9 +571,9 @@ export function PjpPage() {
         <Card>
           <CardContent className="space-y-1 p-4 text-xs text-muted-foreground">
             <p>
-              Sales mengajukan perubahan PJP (tambah, hapus, ubah hari); Sales Supervisor tim memutuskan dengan permission <code className="font-mono">update_pjp</code> (tanpa permission approval terpisah) dalam SLA {settings.changeRequestSlaHours} jam. Perubahan yang disetujui berlaku pada publish berikutnya.
+              Sales mengajukan perubahan PJP (tambah, hapus, ubah hari); pemegang permission <code className="font-mono">update_pjp</code> dalam cakupan datanya memutuskan (tanpa permission approval terpisah) dalam SLA {settings.changeRequestSlaHours} jam. Perubahan yang disetujui berlaku pada publish berikutnya.
             </p>
-            {settings.spvEditPjpDirect && <p>Pengaturan "SPV edit langsung" aktif: SPV juga dapat mengubah PJP langsung di tab Rencana PJP (geser, generate, import).</p>}
+            {settings.spvEditPjpDirect && <p>Pengaturan "edit PJP terbit langsung" aktif: pemegang update_pjp juga dapat mengubah PJP langsung di tab Rencana PJP (geser, generate, import).</p>}
           </CardContent>
           <Table>
             <TableHeader>
@@ -959,7 +958,7 @@ export function PjpPage() {
             )}
             <p className="text-xs text-muted-foreground">
               Batas publish: H-1 pukul {settings.publishCutoff} ({approvalOn ? "bila belum dipublikasikan, job malam menerbitkan versi Disetujui terakhir; PJP yang belum Disetujui tidak diterbitkan" : "bila belum dipublikasikan, Mile Field tetap memakai versi terbit terakhir"}). Pengingat call plan dikirim ke Mile Field pukul {settings.reminderTime}.
-              {settings.lockAfterPublish ? " Setelah publish, perubahan oleh selain SPV lewat Permintaan Perubahan." : ""}
+              {settings.lockAfterPublish ? " Setelah publish, perubahan lewat Permintaan Perubahan (kecuali pengaturan edit langsung untuk pemegang update_pjp aktif)." : ""}
             </p>
             <p className="text-xs text-muted-foreground">Status PJP menjadi Dipublikasikan. Perubahan sesudahnya berlaku pada publish berikutnya (idempotent: tidak ada task ganda).</p>
           </div>

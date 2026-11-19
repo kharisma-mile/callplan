@@ -183,7 +183,7 @@ export interface PjpShift {
   to: string;
 }
 
-/** Module 04: PJP change request from Sales, decided by SPV with `update_pjp`. */
+/** Module 04: PJP change request from Sales, decided by holders of `update_pjp` (data scope). */
 export interface PjpChangeRequest {
   id: string;
   salesId: string;
@@ -231,9 +231,12 @@ export interface Opportunity {
 
 export type ApprovalType = "discount" | "special_order" | "credit_override" | "noo" | "pipeline_stage";
 
+/** D-54: a step is decided by permission, never by role name. Any user whose role holds `permission`
+ *  (or one of `alsoPermissions`, e.g. a higher LOA tier) and whose data scope covers the request may act. */
 export interface ApprovalStep {
   label: string;
-  roles: RoleKey[];
+  permission: string;
+  alsoPermissions?: string[];
   status: "pending" | "approved" | "rejected" | "waiting";
   by?: string;
   at?: string;
@@ -267,7 +270,7 @@ export interface ApprovalRequest {
   discountPct?: number;
   toStage?: OppStage;
   outletId?: string;
-  /** NOO step 2: credit data set by Admin. */
+  /** NOO step 2 (approve_noo_credit): credit data set by the approver. */
   nooCredit?: { limit: number; top: number; priceGroup: string };
 }
 
@@ -330,17 +333,17 @@ export interface TargetChange {
   source: "layar" | "import";
 }
 
+/** D-54: LOA tier = value band linked to a permission. First tier has no permission (Sales may give it without approval). */
 export interface LoaTier {
-  /** "sales" = first tier, Sales may give it without approval. */
-  role: "sales" | RoleKey;
   label: string;
   max: number | null; // null = di atas tier sebelumnya
+  permission: string | null;
 }
 
 export interface Settings {
   variant: Variant;
   pipelineStageApproval: boolean;
-  /** AS-15: Batal needs SPV approval (default on). */
+  /** AS-15: Batal needs approval by holders of approve_pipeline_stage (default on). */
   pipelineBatalApproval: boolean;
   existingCustomerPipeline: boolean;
   overdueDays: number;
@@ -350,7 +353,6 @@ export interface Settings {
   /** Single covering tier (PRD default) or sequential through every tier below. */
   discountTierMode: "single" | "sequential";
   discountBasis: "line" | "order";
-  creditApprover: "spv" | "admin";
   slaHours: number;
   orderReview: boolean;
   orderWithoutVisitHQ: boolean;
@@ -395,9 +397,9 @@ export interface Settings {
   routeStartPoint: "branch" | "home";
   /** Daily call plan push reminder (HH:MM). */
   reminderTime: string;
-  /** Bypass: SPV / Admin edit a published PJP directly without a change request (default off). */
+  /** Bypass: holders of update_pjp edit a published PJP directly without a change request (default off). */
   spvEditPjpDirect: boolean;
-  /** D-53: PJP needs Admin approval (approve_pjp) before publish (default off in v1: Sales Supervisor publishes its own team's PJP directly). */
+  /** D-54: PJP needs approval by holders of approve_pjp before publish (default off: holders of publish_pjp publish directly). */
   pjpApprovalRequired: boolean;
   /** Module 02 assortment: segment without assortment offers all active products ("all") or nothing ("none"). */
   assortmentFallback: "all" | "none";

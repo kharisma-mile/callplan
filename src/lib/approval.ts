@@ -1,39 +1,76 @@
-import type { ApprovalStep, ApprovalType, LoaTier, Order, Outlet, RoleKey, Settings } from "@/data/types";
+import type { ApprovalStep, ApprovalType, LoaTier, Order, Outlet, Settings } from "@/data/types";
 import { productById } from "@/data/mock";
 
-/** Which LOA tier a discount % falls into. Returns null when Sales may give it without approval. */
+/** Which LOA tier a discount % falls into. Returns null when Sales may give it without approval (tier without permission). */
 export function loaTierFor(pctValue: number, loa: LoaTier[]): LoaTier | null {
   for (let i = 0; i < loa.length; i++) {
     const t = loa[i];
-    if (t.max === null || pctValue <= t.max) return i === 0 ? null : t;
+    if (t.max === null || pctValue <= t.max) return t.permission ? t : null;
   }
-  return loa[loa.length - 1];
+  const last = loa[loa.length - 1];
+  return last?.permission ? last : null;
 }
 
-/** D-52: two roles. Sales Supervisor decides within its tier; above it (and every second step) goes to Admin.
- *  Admin may always act on any step. Discount: single covering tier (default) or SPV → Admin when `sequential`. */
+/** Band text of tier i, e.g. "2–5%", "> 5%", "≤ 2%". */
+export function loaBand(loa: LoaTier[], i: number): string {
+  const t = loa[i];
+  const prev = i === 0 ? 0 : loa[i - 1].max ?? 0;
+  return t.max === null ? `> ${prev}%` : i === 0 ? `≤ ${t.max}%` : `${prev}–${t.max}%`;
+}
+
+/** D-54: fixed multi-step chains (ordered steps, each = one permission). Configured per deployment. */
+export const APPROVAL_CHAINS: Record<"special_order" | "noo" | "credit_override" | "pipeline_stage", { label: string; permission: string }[]> = {
+  special_order: [
+    { label: "Review harga khusus", permission: "approve_special_order" },
+    { label: "Persetujuan final", permission: "approve_special_order_final" },
+  ],
+  noo: [
+    { label: "Verifikasi data", permission: "approve_noo" },
+    { label: "Kredit pelanggan", permission: "approve_noo_credit" },
+  ],
+  credit_override: [{ label: "Kelonggaran limit kredit", permission: "approve_credit_override" }],
+  pipeline_stage: [{ label: "Perpindahan tahap", permission: "approve_pipeline_stage" }],
+};
+
+/** Every permission that can decide some step of a request type (header pills, permission hints). */
+export function approvalPerms(type: ApprovalType, settings: Settings): string[] {
+  if (type === "discount") return settings.loa.map((t) => t.permission).filter((x): x is string => !!x);
+  return APPROVAL_CHAINS[type].map((s) => s.permission);
+}
+
+/** Permissions accepted for a step (its own + alternatives such as higher LOA tiers). */
+export const stepPerms = (s: ApprovalStep) => [s.permission, ...(s.alsoPermissions ?? [])];
+
+/** Step badge text: "Tier 1 (2–5%)" or "Langkah 2 · Kredit pelanggan". */
+export function stepTitle(steps: ApprovalStep[], i: number): string {
+  return steps.length > 1 ? `Langkah ${i + 1} · ${steps[i].label}` : steps[i].label;
+}
+
+/** "Penyetuju: pemegang permission …" */
+export function stepApproverText(s: ApprovalStep): string {
+  return `Penyetuju: pemegang permission ${s.permission}${s.alsoPermissions?.length ? ` (atau ${s.alsoPermissions.join(" / ")})` : ""}`;
+}
+
+/** D-54: steps are permissions, never role names. A pending step goes to every user whose role holds the step's permission
+ *  and whose data scope covers the request. Discount: the covering LOA tier (single, higher tiers may also decide)
+ *  or every tier from the first approval tier up to the covering one (sequential). */
 export function buildSteps(type: ApprovalType, opts: { discountPct?: number; settings: Settings }): ApprovalStep[] {
   const { settings } = opts;
-  const mk = (label: string, roles: RoleKey[], first: boolean): ApprovalStep => ({ label, roles, status: first ? "pending" : "waiting" });
-  const spv = (label: string, first = true) => mk(label, ["spv", "admin"], first);
-  const admin = (label: string, first = true) => mk(label, ["admin"], first);
-  switch (type) {
-    case "discount": {
-      const spvTier = settings.loa.find((t) => t.role === "spv");
-      const spvLabel = `LOA: Sales Supervisor${spvTier?.max != null ? ` (≤ ${spvTier.max}%)` : ""}`;
-      const aboveSpv = loaTierFor(opts.discountPct ?? 0, settings.loa)?.role === "admin";
-      if (!aboveSpv) return [spv(spvLabel)];
-      return settings.discountTierMode === "sequential" ? [spv(spvLabel), admin("LOA: Admin", false)] : [admin("LOA: Admin (di atas tier Supervisor)")];
+  const mk = (s: { label: string; permission: string; alsoPermissions?: string[] }, i: number): ApprovalStep => ({ ...s, status: i === 0 ? "pending" : "waiting" });
+  if (type === "discount") {
+    const loa = settings.loa;
+    const cover = loaTierFor(opts.discountPct ?? 0, loa);
+    const ci = cover ? loa.indexOf(cover) : loa.findIndex((t) => t.permission);
+    const tierStep = (i: number) => ({ label: `${loa[i].label} (${loaBand(loa, i)})`, permission: loa[i].permission! });
+    if (ci < 0) return [];
+    if (settings.discountTierMode === "sequential") {
+      const idx = loa.map((t, i) => i).filter((i) => i <= ci && loa[i].permission);
+      return idx.map((i, k) => mk(tierStep(i), k));
     }
-    case "special_order":
-      return [spv("Sales Supervisor"), admin("Admin", false)];
-    case "credit_override":
-      return [settings.creditApprover === "admin" ? admin("Admin") : spv("Sales Supervisor")];
-    case "noo":
-      return [spv("Verifikasi data (Sales Supervisor)"), admin("Limit kredit, TOP & price group (Admin)", false)];
-    case "pipeline_stage":
-      return [spv("Sales Supervisor")];
+    const higher = loa.slice(ci + 1).map((t) => t.permission).filter((x): x is string => !!x);
+    return [mk({ ...tierStep(ci), alsoPermissions: higher.length ? higher : undefined }, 0)];
   }
+  return APPROVAL_CHAINS[type].map(mk);
 }
 
 export interface OrderCheck {

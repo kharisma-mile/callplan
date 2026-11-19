@@ -62,7 +62,8 @@ export function PipelinePage() {
     if (!a) return o.outletId && outlets.find((x) => x.id === o.outletId)?.status !== "baru" ? "NOO disetujui" : null;
     if (a.status === "approved") return "NOO disetujui";
     if (a.status === "rejected") return "NOO ditolak";
-    return `NOO: menunggu ${a.steps.find((s) => s.status === "pending")?.label.includes("Admin") ? "Admin" : "Sales Supervisor"}`;
+    const i = a.steps.findIndex((s) => s.status === "pending");
+    return i < 0 ? "NOO: menunggu" : `NOO: menunggu langkah ${i + 1} (${a.steps[i].permission})`;
   };
   const [view, setView] = useState<"kanban" | "list">("kanban");
   const [salesFilter, setSalesFilter] = useState("all");
@@ -95,7 +96,7 @@ export function PipelinePage() {
     const o = opps.find((x) => x.id === id);
     if (!o || o.stage === stage) return;
     if (o.pendingStage) {
-      toast({ tone: "warning", title: "Masih menunggu approval", desc: `Perpindahan ke ${o.pendingStage} belum diputuskan SPV.` });
+      toast({ tone: "warning", title: "Masih menunggu approval", desc: `Perpindahan ke ${o.pendingStage} belum diputuskan pemegang approve_pipeline_stage.` });
       return;
     }
     if (stage === "Batal") setBatal({ id, reason: BATAL_REASONS[0], other: "" });
@@ -149,11 +150,11 @@ export function PipelinePage() {
           <>
             4 tahap sederhana: Prospek → Dijadwalkan → Kunjungan &amp; Negosiasi → Menang / Batal.{" "}
             {settings.pipelineStageApproval ? (
-              <b className="text-[#BA4917]">Approval SPV per tahap aktif (setiap perpindahan).</b>
+              <b className="text-[#BA4917]">Approval per tahap aktif (setiap perpindahan, approve_pipeline_stage).</b>
             ) : settings.pipelineBatalApproval ? (
-              "NOO dibuat di tahap Prospek (request Sales Supervisor → Admin); Menang = pesanan pertama disetujui; Batal perlu approval SPV."
+              "NOO dibuat di tahap Prospek (request approve_noo → approve_noo_credit); Menang = pesanan pertama disetujui; Batal perlu approval (approve_pipeline_stage)."
             ) : (
-              "NOO dibuat di tahap Prospek (request Sales Supervisor → Admin); Menang = pesanan pertama disetujui; perpindahan tahap lain bebas."
+              "NOO dibuat di tahap Prospek (request approve_noo → approve_noo_credit); Menang = pesanan pertama disetujui; perpindahan tahap lain bebas."
             )}
           </>
         }
@@ -357,7 +358,7 @@ export function PipelinePage() {
                 )}
                 {detail.pendingStage && (
                   <p className="rounded-md bg-[#FCEEE8] p-2 text-xs text-[#8D3711]">
-                    Menunggu approval SPV untuk pindah ke <b>{detail.pendingStage}</b> (halaman Request › Pipeline).
+                    Menunggu approval (pemegang approve_pipeline_stage) untuk pindah ke <b>{detail.pendingStage}</b> (halaman Request › Pipeline).
                   </p>
                 )}
                 <div className="grid grid-cols-2 gap-4">
@@ -518,7 +519,7 @@ export function PipelinePage() {
             <div className="grid grid-cols-2 gap-4 p-4">
               {create.type === "Pelanggan Baru (NOO)" && (
                 <p className="col-span-2 rounded-md border border-[#9FE1FE] bg-[#E6F7FF] p-2 text-xs text-[#01496A]">
-                  Jenis Pelanggan Baru: NOO dibuat di tahap Prospek (outlet prospek berstatus Pelanggan Baru + Request NOO Sales Supervisor → Admin). Jalur utama tetap registrasi NOO dari Mile Field.
+                  Jenis Pelanggan Baru: NOO dibuat di tahap Prospek (outlet prospek berstatus Pelanggan Baru + Request NOO: approve_noo → approve_noo_credit). Jalur utama tetap registrasi NOO dari Mile Field.
                 </p>
               )}
               {!settings.existingCustomerPipeline && (

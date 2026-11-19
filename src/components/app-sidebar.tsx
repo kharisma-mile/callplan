@@ -50,7 +50,7 @@ export const REPORT_PERMS = [
   "adoption",
 ].map((r) => `view_any_${r}`);
 
-/** D-53 navigation: Dashboard · Master · Sales Operation · Request · Report · Integration · Setting (Integration / Setting are Admin-only through permissions). */
+/** D-53 navigation: Dashboard · Master · Sales Operation · Request · Report · Integration · Setting (Integration / Setting visible only to holders of their view permissions). */
 export function useNav(): NavItem[] {
   const { settings } = useApp();
   const req = (page: RequestPage) => REQUEST_PAGES[page].types;

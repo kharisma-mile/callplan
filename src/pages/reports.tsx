@@ -32,7 +32,7 @@ const REPORTS: { key: ReportKey; label: string; desc: string }[] = [
   { key: "call_compliance_report", label: "Laporan Call Compliance", desc: "Kunjungan aktual ÷ rencana PJP (extra call tidak masuk penyebut)." },
   { key: "order_report", label: "Laporan Pesanan", desc: "Pesanan dari Mile Field per status, outlet, salesman dan nilai." },
   { key: "approval_log", label: "Log Approval", desc: "Setiap keputusan approval: pengguna, role, permission, waktu, alasan." },
-  { key: "noo_report", label: "Laporan NOO", desc: "Registrasi pelanggan baru dan status request Sales Supervisor → Admin." },
+  { key: "noo_report", label: "Laporan NOO", desc: "Registrasi pelanggan baru dan status request (verifikasi data approve_noo → kredit approve_noo_credit)." },
   { key: "pipeline_report", label: "Laporan Pipeline", desc: "Peluang per tahap, nilai estimasi, follow-up dan alasan batal." },
   { key: "survey_report", label: "Laporan Survey Kompetitor", desc: "Entri survey kompetitor dari kunjungan efektif (harga, merek, produk)." },
   { key: "target_achievement_report", label: "Laporan Pencapaian Target", desc: "Target vs aktual per salesman per bulan." },

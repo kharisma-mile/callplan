@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Database, FileSpreadsheet, Lock, Save, TriangleAlert } from "lucide-react";
+import { Database, FileSpreadsheet, Lock, Minus, Plus, Save, TriangleAlert } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,8 @@ import { BRANCHES, HOLIDAYS } from "@/data/mock";
 import type { Frequency, Settings, Variant } from "@/data/types";
 import { FREQS, FREQ_HINT, FREQ_META } from "@/data/pjp-engine";
 import { fmtDate } from "@/lib/format";
+import { APPROVAL_CHAINS, loaBand } from "@/lib/approval";
+import { rolesHolding } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
 type Keys = (keyof Settings)[];
@@ -20,19 +22,18 @@ type Keys = (keyof Settings)[];
 const LABELS: Partial<Record<keyof Settings, string>> = {
   assortmentFallback: "Cadangan assortment",
   odooWriteBackSalesperson: "Tulis balik salesperson ke Odoo",
-  pipelineStageApproval: "Approval SPV per tahap pipeline",
-  pipelineBatalApproval: "Approval Batal pipeline oleh SPV",
+  pipelineStageApproval: "Approval per tahap pipeline (approve_pipeline_stage)",
+  pipelineBatalApproval: "Approval Batal pipeline (approve_pipeline_stage)",
   existingCustomerPipeline: "Pipeline pelanggan lama",
   overdueDays: "Batas piutang jatuh tempo (hari)",
   approvalTrigger: "Pemicu approval pesanan",
   discountTierMode: "Mode tier diskon",
   discountBasis: "Ukuran diskon",
-  creditApprover: "Penyetuju limit kredit",
   slaHours: "SLA pengingat approval (jam)",
   loa: "Tier LOA diskon",
   defaultFreq: "Frekuensi default",
-  spvEditPjpDirect: "SPV edit PJP terbit langsung",
-  pjpApprovalRequired: "PJP perlu approval Admin sebelum publish",
+  spvEditPjpDirect: "Edit PJP terbit langsung (update_pjp)",
+  pjpApprovalRequired: "PJP perlu approval sebelum publish (pemegang approve_pjp)",
   pjpCallTarget: "Target call per hari",
   pjpMaxCalls: "Maksimum call per hari",
   hqCallTarget: "Target call per hari (HQ)",
@@ -91,7 +92,7 @@ function SettingsCard({
   const save = () => {
     setSettings((s) => ({ ...s, ...draft }));
     changed.forEach((k) =>
-      addAudit({ module: "Pengaturan", action: "Pengaturan disimpan", target: LABELS[k] ?? k, detail: k === "loa" ? merged.loa.map((t) => `${t.label} ${t.max ?? "∞"}`).join(", ") : `${show(settings[k])} → ${show(merged[k])}` })
+      addAudit({ module: "Pengaturan", action: "Pengaturan disimpan", target: LABELS[k] ?? k, detail: k === "loa" ? merged.loa.map((t) => `${t.label} ${t.max ?? "∞"}${t.permission ? ` (${t.permission})` : ""}`).join(", ") : `${show(settings[k])} → ${show(merged[k])}` })
     );
     setDraft({});
     toast({ tone: "success", title: `${title} disimpan`, desc: "Perubahan berlaku untuk permintaan / dokumen baru." });
@@ -293,10 +294,10 @@ export function SettingsPage() {
         >
           {(d, set, ed) => (
             <>
-              <Row title="Approval Batal pipeline oleh SPV" hint="Default aktif (AS-15). Peluang tetap di tahapnya sampai Sales Supervisor memutuskan di Request → Tahap Pipeline.">
+              <Row title="Batal pipeline perlu approval (pemegang approve_pipeline_stage)" hint="Default aktif (AS-15). Peluang tetap di tahapnya sampai pemegang approve_pipeline_stage (dalam cakupan datanya) memutuskan di Request → Tahap Pipeline.">
                 <Switch checked={d.pipelineBatalApproval} disabled={!ed} onChange={(v) => set({ pipelineBatalApproval: v })} />
               </Row>
-              <Row title="Approval SPV per perpindahan tahap pipeline" hint="Default mati. Jika aktif, setiap perpindahan tahap menunggu approval SPV.">
+              <Row title="Setiap perpindahan tahap pipeline perlu approval (pemegang approve_pipeline_stage)" hint="Default mati. Jika aktif, setiap perpindahan tahap menunggu pemegang approve_pipeline_stage.">
                 <Switch checked={d.pipelineStageApproval} disabled={!ed} onChange={(v) => set({ pipelineStageApproval: v })} />
               </Row>
               <Row title="Pipeline untuk pelanggan lama (produk baru / proyek)" hint="Opsi hibrida, default mati (AS-14). Default pipeline hanya untuk Pelanggan Baru (NOO).">
@@ -311,7 +312,7 @@ export function SettingsPage() {
 
         <SettingsCard
           title="Approval pesanan"
-          keys={["approvalTrigger", "discountTierMode", "discountBasis", "creditApprover", "slaHours"]}
+          keys={["approvalTrigger", "discountTierMode", "discountBasis", "slaHours"]}
           validate={(d) => (d.slaHours < 1 || d.slaHours > 168 ? "SLA harus antara 1 dan 168 jam." : null)}
         >
           {(d, set, ed) => (
@@ -319,14 +320,11 @@ export function SettingsPage() {
               <Row title="Pemicu approval" hint="Otomatis (default PRD): request dibuat saat pesanan masuk, sebelum review pesanan. Manual: peninjau pesanan menekan Ajukan approval.">
                 <Pick value={d.approvalTrigger} disabled={!ed} onChange={(v) => set({ approvalTrigger: v })} options={[["auto", "Otomatis saat pesanan masuk"], ["manual", "Manual dari Review Pesanan"]]} />
               </Row>
-              <Row title="Mode tier diskon" hint="Default: langsung ke satu tier yang mencakup besar diskon (Admin selalu boleh memutuskan). Berurutan: di atas tier Supervisor, Sales Supervisor dulu lalu Admin.">
+              <Row title="Mode tier diskon" hint="Default: satu langkah ke tier yang mencakup besar diskon (pemegang permission tier di atasnya juga boleh memutuskan). Berurutan: satu langkah per tier, dari Tier 1 sampai tier yang mencakup.">
                 <Pick value={d.discountTierMode} disabled={!ed} onChange={(v) => set({ discountTierMode: v })} options={[["single", "Satu tier yang mencakup"], ["sequential", "Berurutan setiap tier"]]} />
               </Row>
               <Row title="Ukuran diskon" hint="Dasar perbandingan dengan tier LOA.">
                 <Pick value={d.discountBasis} disabled={!ed} onChange={(v) => set({ discountBasis: v })} options={[["order", "Rata-rata tertimbang pesanan"], ["line", "Maksimum per baris"]]} />
-              </Row>
-              <Row title="Penyetuju limit kredit" hint="Default Sales Supervisor tim (Admin selalu dapat memutuskan).">
-                <Pick value={d.creditApprover} disabled={!ed} onChange={(v) => set({ creditApprover: v })} options={[["spv", "Sales Supervisor"], ["admin", "Admin saja"]]} />
               </Row>
               <Row title="SLA pengingat approval (jam)" hint="Request pending melewati SLA ditandai 'Lewat SLA' dan penyetuju diingatkan. Tanpa auto-approve.">
                 <Input type="number" className="w-24 text-right" disabled={!ed} value={d.slaHours} onChange={(e) => set({ slaHours: Number(e.target.value) })} />
@@ -347,47 +345,7 @@ export function SettingsPage() {
             return null;
           }}
         >
-          {(d, set, ed) => (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">No.</TableHead>
-                    <TableHead>Penyetuju</TableHead>
-                    <TableHead>Rentang diskon</TableHead>
-                    <TableHead className="w-[140px] text-right">Batas atas (%)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {d.loa.map((t, i) => {
-                    const prev = i === 0 ? 0 : d.loa[i - 1].max ?? 0;
-                    return (
-                      <TableRow key={t.role}>
-                        <TableCell>{i + 1}</TableCell>
-                        <TableCell className="font-medium">{t.label}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{t.max === null ? `> ${prev}%` : i === 0 ? `0–${t.max}% (tanpa approval)` : `> ${prev}% s.d. ${t.max}%`}</TableCell>
-                        <TableCell className="text-right">
-                          {t.max === null ? (
-                            <span className="text-sm text-muted-foreground">di atasnya</span>
-                          ) : (
-                            <Input
-                              type="number"
-                              step="0.5"
-                              className="h-[31px] text-right"
-                              disabled={!ed}
-                              value={t.max}
-                              onChange={(e) => set({ loa: d.loa.map((x, j) => (j === i ? { ...x, max: Number(e.target.value) } : x)) })}
-                            />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-              <p className="text-xs text-muted-foreground">Contoh tier (Sales 2%, Sales Supervisor 5%, Admin di atasnya) — angka final ditetapkan UP. Perubahan berlaku untuk permintaan diskon baru.</p>
-            </>
-          )}
+          {(d, set, ed) => <LoaEditor loa={d.loa} editable={ed} onChange={(loa) => set({ loa })} />}
         </SettingsCard>
 
         <Card>
@@ -395,6 +353,9 @@ export function SettingsPage() {
             <CardTitle className="flex items-center gap-2 text-base">
               Rantai approval <Badge variant="neutral"><Lock className="mr-1 h-3 w-3" /> read-only · diubah lewat konfigurasi deployment</Badge>
             </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Setiap langkah = satu permission. Request masuk ke semua pengguna yang role-nya memegang permission langkah tersebut dan cakupan datanya (tim / cabang / semua) mencakup request. Atur siapa pemegangnya di Setting → Role.
+            </p>
           </CardHeader>
           <CardContent className="pt-0">
             <Table>
@@ -407,11 +368,17 @@ export function SettingsPage() {
               </TableHeader>
               <TableBody>
                 {[
-                  ["Diskon (LOA)", settings.discountTierMode === "single" ? "1 langkah: Sales Supervisor dalam tiernya, di atasnya Admin" : "Berurutan: Sales Supervisor → Admin bila di atas tier Supervisor"],
-                  ["Pesanan Khusus (LOA)", "Sales Supervisor → Admin"],
-                  ["Limit Kredit (LOA)", settings.creditApprover === "admin" ? "Admin" : "Sales Supervisor"],
-                  ["New Customer (NOO)", "Sales Supervisor (verifikasi data) → Admin (limit kredit, TOP, price group)"],
-                  ["Pipeline", settings.pipelineStageApproval ? "Sales Supervisor untuk setiap perpindahan tahap" : settings.pipelineBatalApproval ? "Sales Supervisor untuk Batal" : "Tidak aktif"],
+                  [
+                    "Diskon (LOA)",
+                    settings.discountTierMode === "single"
+                      ? `1 langkah, tier yang mencakup: ${settings.loa.filter((t) => t.permission).map((t) => `${t.label} → ${t.permission}`).join(" · ")} (tier di atasnya juga boleh)`
+                      : `Berurutan per tier: ${settings.loa.filter((t) => t.permission).map((t) => t.permission).join(" → ")}`,
+                  ],
+                  ["Pesanan Khusus (LOA)", APPROVAL_CHAINS.special_order.map((st, i) => `Langkah ${i + 1} · ${st.label} (${st.permission})`).join(" → ")],
+                  ["Limit Kredit (LOA)", `${APPROVAL_CHAINS.credit_override[0].label} (${APPROVAL_CHAINS.credit_override[0].permission})`],
+                  ["New Customer (NOO)", APPROVAL_CHAINS.noo.map((st, i) => `Langkah ${i + 1} · ${st.label} (${st.permission})`).join(" → ") + " — langkah 2 menetapkan limit kredit, TOP, price group"],
+                  ["Pipeline", settings.pipelineStageApproval ? "Setiap perpindahan tahap (approve_pipeline_stage)" : settings.pipelineBatalApproval ? "Batal saja (approve_pipeline_stage)" : "Tidak aktif"],
+                  ["PJP", settings.pjpApprovalRequired ? "Sebelum publish (approve_pjp)" : "Tidak aktif (pemegang publish_pjp langsung publish)"],
                 ].map(([k, v], i) => (
                   <TableRow key={k}>
                     <TableCell>{i + 1}</TableCell>
@@ -563,10 +530,10 @@ export function SettingsPage() {
               <Row title="Kunci PJP setelah publish" hint="Perubahan sesudah publish lewat Permintaan Perubahan.">
                 <Switch checked={d.lockAfterPublish} disabled={!ed} onChange={(v) => set({ lockAfterPublish: v })} />
               </Row>
-              <Row title="PJP perlu approval Admin sebelum publish" hint="Default MATI (v1): Sales Supervisor menyusun dan langsung mempublikasikan PJP timnya (Draft → Dipublikasikan). Bila aktif: Draft → Menunggu Approval → Disetujui → Dipublikasikan; Admin menyetujui (permission approve_pjp); publish hanya untuk PJP Disetujui.">
+              <Row title="PJP perlu approval sebelum publish (pemegang approve_pjp)" hint="Default MATI (v1): pemegang publish_pjp menyusun dan langsung mempublikasikan PJP (Draft → Dipublikasikan). Bila aktif: Draft → Menunggu Approval → Disetujui → Dipublikasikan; disetujui pemegang approve_pjp dalam cakupan datanya; publish hanya untuk PJP Disetujui.">
                 <Switch checked={d.pjpApprovalRequired} disabled={!ed} onChange={(v) => set({ pjpApprovalRequired: v })} />
               </Row>
-              <Row title="SPV boleh mengubah PJP terbit langsung" hint={d.pjpApprovalRequired ? "Default MATI. Bila aktif, edit SPV / Admin langsung berstatus Disetujui tanpa approval dan PJP terbit boleh diubah (perlu publish ulang)." : "Default MATI. Bila aktif, SPV / Admin boleh mengubah PJP terbit tanpa Permintaan Perubahan (hasilnya Draft, perlu publish ulang)."}>
+              <Row title="Pemegang update_pjp boleh mengubah PJP terbit langsung" hint={d.pjpApprovalRequired ? "Default MATI. Bila aktif, edit oleh pemegang update_pjp langsung berstatus Disetujui tanpa approval dan PJP terbit boleh diubah (perlu publish ulang)." : "Default MATI. Bila aktif, pemegang update_pjp boleh mengubah PJP terbit tanpa Permintaan Perubahan (hasilnya Draft, perlu publish ulang)."}>
                 <Switch checked={d.spvEditPjpDirect} disabled={!ed} onChange={(v) => set({ spvEditPjpDirect: v })} />
               </Row>
               <Row title="SLA keputusan (jam)" hint="Lewat SLA ditandai merah di tab Permintaan Perubahan.">
@@ -668,5 +635,88 @@ export function SettingsPage() {
         </Table>
       </Card>
     </div>
+  );
+}
+
+/** D-54: LOA tier = value band + permission. Who holds each permission is shown as info (computed from current roles). */
+function LoaEditor({ loa, editable, onChange }: { loa: Settings["loa"]; editable: boolean; onChange: (loa: Settings["loa"]) => void }) {
+  const { permissions, roles } = useApp();
+  const addTier = () => {
+    const n = loa.filter((t) => t.permission).length + 1;
+    const lastMax = loa.length > 1 ? loa[loa.length - 2].max ?? 0 : 0;
+    const next = loa.map((t, i) => (i === loa.length - 1 ? { ...t, max: lastMax + 5 } : t));
+    onChange([...next, { label: `Tier ${n}`, max: null, permission: `approve_discount_tier_${n}` }]);
+  };
+  const removeTier = () => onChange(loa.slice(0, -1).map((t, i, arr) => (i === arr.length - 1 ? { ...t, max: null } : t)));
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12">No.</TableHead>
+            <TableHead>Tier</TableHead>
+            <TableHead>Rentang diskon</TableHead>
+            <TableHead className="w-[110px] text-right">Batas atas (%)</TableHead>
+            <TableHead>Permission penyetuju</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loa.map((t, i) => {
+            const holders = t.permission ? rolesHolding(t.permission, permissions, roles) : [];
+            return (
+              <TableRow key={i}>
+                <TableCell>{i + 1}</TableCell>
+                <TableCell className="font-medium">{t.label}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {loaBand(loa, i)}
+                  {!t.permission && " (tanpa approval)"}
+                </TableCell>
+                <TableCell className="text-right">
+                  {t.max === null ? (
+                    <span className="text-sm text-muted-foreground">di atasnya</span>
+                  ) : (
+                    <Input
+                      type="number"
+                      step="0.5"
+                      className="h-[31px] text-right"
+                      disabled={!editable}
+                      value={t.max}
+                      onChange={(e) => onChange(loa.map((x, j) => (j === i ? { ...x, max: Number(e.target.value) } : x)))}
+                    />
+                  )}
+                </TableCell>
+                <TableCell>
+                  {t.permission ? (
+                    <>
+                      <code className="font-mono text-xs">{t.permission}</code>
+                      <p className={cn("text-xs", holders.length ? "text-muted-foreground" : "text-[#BF2130]")}>
+                        {holders.length ? `dipegang oleh role: ${holders.join(", ")}` : "belum dipegang role mana pun — atur di Setting → Role"}
+                      </p>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sales tanpa approval</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      {editable && (
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={addTier}>
+            <Plus /> Tambah tier
+          </Button>
+          {loa.filter((t) => t.permission).length > 1 && (
+            <Button size="sm" variant="ghost" onClick={removeTier}>
+              <Minus /> Hapus tier terakhir
+            </Button>
+          )}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Contoh tier (≤ 2% tanpa approval, 2–5% approve_discount_tier_1, di atasnya approve_discount_tier_2) — angka final ditetapkan UP. Tier baru menambah permission <code className="font-mono">approve_discount_tier_n</code> di Setting → Role (grup Request) dan belum dipegang role mana pun sampai diberikan. Perubahan berlaku untuk permintaan diskon baru.
+      </p>
+    </>
   );
 }
