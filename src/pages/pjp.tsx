@@ -112,10 +112,12 @@ export function PjpPage() {
         return { ...h, version: nv, status: bypass ? "Disetujui" : "Draft", note: h.status === "Dipublikasikan" ? `Versi ${nv} (Draft) dari perubahan setelah publish` : note, publishedAt: h.status === "Dipublikasikan" ? undefined : h.publishedAt };
       }),
     );
+  const closedConflicts = useMemo(() => entries.filter((e) => isClosedOn(outletMap.get(e.outletId), e.day)).length, [entries, outletMap]);
   const submitApproval = () => {
     setPjpHeaders((hs) => hs.map((h) => (h.salesId === salesId ? { ...h, status: "Menunggu Approval", submittedBy: user?.name, submittedAt: nowStamp(), rejectReason: undefined, note: `Diajukan ${user?.name ?? ""}, menunggu ${APPROVER_LABEL[settings.pjpApprover]}` } : h)));
     addAudit({ module: "PJP", action: "PJP diajukan untuk approval", target: s.name, detail: `Versi ${header?.version} · penyetuju ${APPROVER_LABEL[settings.pjpApprover]} (update_pjp)` });
     toast({ tone: "success", title: "PJP diajukan untuk approval", desc: `${s.name} · versi ${header?.version} menunggu ${APPROVER_LABEL[settings.pjpApprover]}. PJP terkunci sampai diputuskan.` });
+    if (closedConflicts) toast({ tone: "warning", title: `${closedConflicts} kunjungan di hari outlet tutup`, desc: "PJP tetap diajukan. Penyetuju akan melihat peringatan ini; pindahkan harinya bila perlu." });
   };
   const approvePjp = (id: string) => {
     const h = pjpHeaders.find((x) => x.salesId === id);
@@ -478,6 +480,12 @@ export function PjpPage() {
         </Card>
       )}
 
+      {closedConflicts > 0 && tab === "plan" && (
+        <p className="flex items-start gap-2 rounded-md border border-[#F5C2C7] bg-[#FDECEE] px-3 py-2 text-xs text-[#842029]">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {closedConflicts} kunjungan jatuh di hari outlet tutup (tanda merah "Outlet tutup"). Ini peringatan: PJP tetap bisa diajukan dan dipublikasikan; pindahkan ke hari kunjungan outlet bila perlu.
+        </p>
+      )}
       {locked && tab !== "requests" && tab !== "approval" && (
         <p className="flex items-start gap-2 rounded-md border border-[#F5D77A] bg-[#FFF4D1] px-3 py-2 text-xs text-[#6B5000]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
