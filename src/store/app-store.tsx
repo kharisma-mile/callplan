@@ -74,6 +74,7 @@ function nooDetails(opp: Opportunity) {
     { label: "Alamat + GPS", value: `${opp.city} · -7.2575, 112.7521 (check-in Mile Field)` },
     { label: "Dokumen", value: "Foto toko, KTP (NPWP: non-PKP)" },
     { label: "Segmen usulan", value: "Horeka" },
+    { label: "Hari kunjungan", value: "Semua hari (Senin–Sabtu)" },
     { label: "Limit diminta", value: rupiah(15_000_000) + " · TOP 14 hari" },
   ];
 }
@@ -103,6 +104,7 @@ function nooOutletFor(opp: Opportunity, into: Outlet[] = M.OUTLETS): Outlet {
     gps: { lat: -7.2575, lng: 112.7521 },
     pkp: false,
     priceGroup: "Retail",
+    visitDays: [0, 1, 2, 3, 4, 5],
     source: "noo",
   };
   into.unshift(o);

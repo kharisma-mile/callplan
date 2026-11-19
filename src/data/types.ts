@@ -117,6 +117,8 @@ export interface Outlet {
   routeId?: string;
   /** Visit order within the route (1 = first stop). */
   routeSeq?: number;
+  /** D-51: days the outlet can be visited (0 = Senin .. 5 = Sabtu). Default all 6. */
+  visitDays: number[];
   source: "odoo" | "import" | "noo" | "manual";
 }
 

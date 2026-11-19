@@ -29,7 +29,7 @@ import type {
   PjpHeader,
   Frequency,
 } from "./types";
-import { generatePjp, isOn, simulateDay, validOn } from "./pjp-engine";
+import { generatePjp, hash01, isOn, simulateDay, validOn } from "./pjp-engine";
 
 /* ---------- deterministic RNG so the demo is identical every load ---------- */
 let seed = 20261117;
@@ -251,6 +251,7 @@ for (const s of SALESMEN) {
       priceGroup: size === 3 ? "Grosir" : pick(["Retail", "Retail", "Grosir", "Horeka / Industri"]),
       routeId: `R-${s.code}-${d + 1}`,
       routeSeq: beat.n,
+      visitDays: [0, 1, 2, 3, 4, 5],
       source: status === "baru" ? "noo" : "odoo",
     });
     const last = OUTLETS[OUTLETS.length - 1];
@@ -258,6 +259,11 @@ for (const s of SALESMEN) {
     last.pkp = !!last.npwp && rnd() < 0.6;
     outletSeq++;
   }
+}
+/* D-51: ~15% of outlets have restricted visit days (deterministic hash, does not shift the rnd() sequence). */
+const VISIT_PATTERNS = [[0, 1, 2, 3, 5], [0, 1, 2, 3, 4], [0, 2, 4], [1, 3, 5], [0, 1, 2, 3]];
+for (const o of OUTLETS) {
+  if (hash01(o.id + "vd") < 0.15) o.visitDays = VISIT_PATTERNS[Math.floor(hash01(o.id + "vp") * VISIT_PATTERNS.length)];
 }
 export function nextOutletSeq() {
   return outletSeq++;
@@ -288,6 +294,17 @@ for (const s of SALESMEN) {
       nextId: nextPjpId,
     })
   );
+}
+
+/** D-51 demo: 2 outlets of S-SBY-01 changed their visit days after the PJP was made → entry flagged "Outlet tutup" (not moved). */
+export const CLOSED_DAY_CONFLICT_SEED: string[] = [];
+{
+  const own = PJP.filter((e) => e.salesId === SALESMEN.find((x) => x.spvId === "SPV-SBY-1")!.id);
+  for (const e of [own[3], own[17]].filter(Boolean)) {
+    const o = OUTLETS.find((x) => x.id === e.outletId)!;
+    o.visitDays = [0, 1, 2, 3, 4, 5].filter((d) => d !== e.day);
+    CLOSED_DAY_CONFLICT_SEED.push(o.id);
+  }
 }
 
 /** PJP header per salesman (version, status, validity). */

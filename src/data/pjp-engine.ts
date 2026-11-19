@@ -22,6 +22,18 @@ export function weeksFor(freq: Frequency, alt = 0): number[] {
 
 /** One visit day per entry, so calls per cycle = number of weeks. */
 export const callsPerCycle = (e: Pick<PjpEntry, "weeks">) => e.weeks.length;
+/** D-51: outlet visit days (default all 6). */
+export const ALL_DAYS = [0, 1, 2, 3, 4, 5];
+export const outletDays = (o?: Pick<Outlet, "visitDays">) => (o?.visitDays?.length ? o.visitDays : ALL_DAYS);
+export const isAllDays = (days: number[]) => ALL_DAYS.every((d) => days.includes(d));
+export const isClosedOn = (o: Pick<Outlet, "visitDays"> | undefined, day: number) => !outletDays(o).includes(day);
+/** Short label: "Semua hari" or "Sen, Rab, Jum". */
+export const DAY_ABBR = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+export const visitDaysLabel = (days?: number[]) => (!days?.length || isAllDays(days) ? "Semua hari" : [...days].sort().map((d) => DAY_ABBR[d]).join(", "));
+/** Nearest open day to `d` (same day first, then +1, -1, +2, ...), limited to `allowed`. */
+export function nearestDay(d: number, allowed: number[]) {
+  return [d, d + 1, d - 1, d + 2, d - 2, d + 3, d - 3, d + 4, d - 4, d + 5, d - 5].find((x) => x >= 0 && x <= 5 && allowed.includes(x)) ?? allowed[0] ?? d;
+}
 export const isOn = (e: Pick<PjpEntry, "weeks" | "day">, week: number, day: number) => e.day === day && e.weeks.includes(week);
 export const validOn = (e: Pick<PjpEntry, "validFrom" | "validTo">, date: string) => e.validFrom <= date && (!e.validTo || e.validTo >= date);
 
@@ -68,6 +80,8 @@ export interface GenerateInput {
   workDays?: number[];
   /** false = ignore the beat day and place each outlet on the lightest day. */
   keepRoute?: boolean;
+  /** Filled by generate: outlets placed on another day because the route day is closed (D-51). */
+  stats?: { closedShifted: number };
 }
 
 /**
@@ -87,14 +101,25 @@ export function generatePjp(inp: GenerateInput): PjpEntry[] {
   const out: PjpEntry[] = [];
   for (const { o, f } of list) {
     let base = inp.keepRoute !== false && o.routeId !== undefined ? routeDay.get(o.routeId) : undefined;
-    if (base === undefined) base = work.reduce((m, d) => (dayTotal(d) < dayTotal(m) ? d : m), work[0]);
+    const fromRoute = base !== undefined;
+    if (base === undefined) {
+      const free = outletDays(o).filter((d) => work.includes(d));
+      const cand = free.length ? free : work;
+      base = cand.reduce((m, d) => (dayTotal(d) < dayTotal(m) ? d : m), cand[0]);
+    }
     base = nearestWork(base);
+    const open = outletDays(o).filter((d) => work.includes(d));
+    const allowed = open.length ? open : outletDays(o);
+    if (!allowed.includes(base)) {
+      base = nearestDay(base, allowed);
+      if (inp.stats && fromRoute) inp.stats.closedShifted++;
+    }
     let day = base;
     let weeks = [1, 2, 3, 4];
     let moved = false;
     if (f === "F1" || f === "F2") {
       const weekOpts = f === "F1" ? [[1], [2], [3], [4]] : [[1, 3], [2, 4]];
-      const dayOpts = [base, base - 1, base + 1].filter((d) => d >= 0 && d <= 5 && work.includes(d));
+      const dayOpts = [base, base - 1, base + 1].filter((d) => d >= 0 && d <= 5 && allowed.includes(d));
       let best = { cost: Infinity, d: base, w: weekOpts[0] };
       for (const d of dayOpts)
         for (const w of weekOpts) {

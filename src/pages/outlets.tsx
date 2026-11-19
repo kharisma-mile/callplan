@@ -13,7 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CustomerBadge, OrderBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
-import { BRANCHES, CUSTOMER_STATUS_LABEL, PRICE_GROUPS, SALESMEN, nextOutletSeq } from "@/data/mock";
+import { BRANCHES, CUSTOMER_STATUS_LABEL, DAYS, PRICE_GROUPS, SALESMEN, nextOutletSeq } from "@/data/mock";
+import { ALL_DAYS, DAY_ABBR, isAllDays, isClosedOn, visitDaysLabel } from "@/data/pjp-engine";
 import type { CustomerStatus, Outlet, Variant } from "@/data/types";
 import { Checkbox } from "@/components/switch";
 import { fmtDate, pct, rupiah, rupiahShort } from "@/lib/format";
@@ -21,6 +22,16 @@ import { orderTotal } from "@/lib/approval";
 
 const SEGMENTS = ["Grosir Plastik", "Toko Kemasan", "Industri F&B", "Horeka", "Agen / Sub-distributor", "Toko Kelontong"];
 const SOURCE_LABEL: Record<Outlet["source"], string> = { odoo: "Odoo (sinkron)", import: "Import Excel", noo: "NOO Mile Field", manual: "Dibuat di web" };
+
+/** D-51: "Semua hari" or the short list of open days. */
+function VisitDaysBadge({ days }: { days?: number[] }) {
+  const all = !days?.length || isAllDays(days);
+  return (
+    <Badge variant={all ? "neutral" : "warning"} title={all ? "Bisa dikunjungi Senin–Sabtu" : `Hanya bisa dikunjungi: ${days!.map((d) => DAYS[d]).join(", ")}`}>
+      {visitDaysLabel(days)}
+    </Badge>
+  );
+}
 
 /** Module 01 FR-009: the customer status is derived by a job, never entered manually. */
 export function statusRule(s: CustomerStatus, variant: Variant) {
@@ -70,6 +81,7 @@ const blank = (salesId: string): Outlet => {
     active: true,
     pkp: false,
     priceGroup: "Retail",
+    visitDays: [...ALL_DAYS],
     source: "manual",
   };
 };
@@ -137,9 +149,15 @@ export function OutletsPage() {
       toast({ tone: "success", title: "Outlet dibuat", desc: `${n.name} · status Pelanggan Baru (diturunkan otomatis)${A ? " · menjadi pelanggan Odoo lewat jalur NOO + approval" : ""}` });
     } else {
       const n = { ...o, branchId: salesOf(o.salesId).branchId };
+      const prev = outlets.find((x) => x.id === o.id);
+      const daysChanged = visitDaysLabel(prev?.visitDays) !== visitDaysLabel(n.visitDays);
       setOutlets((l) => l.map((x) => (x.id === o.id ? n : x)));
-      addAudit({ module: "Outlet", action: "Outlet diubah", target: n.code, detail: n.name });
+      addAudit({ module: "Outlet", action: "Outlet diubah", target: n.code, detail: daysChanged ? `${n.name} · hari kunjungan ${visitDaysLabel(prev?.visitDays)} → ${visitDaysLabel(n.visitDays)}` : n.name });
       toast({ tone: "success", title: "Outlet diperbarui", desc: n.name });
+      // D-51: PJP entries on a now-closed day are flagged, not moved.
+      const conflicts = daysChanged ? pjp.filter((e) => e.outletId === n.id && isClosedOn(n, e.day)) : [];
+      if (conflicts.length)
+        toast({ tone: "warning", title: `${conflicts.length} entri PJP di hari tutup`, desc: `${n.name} tutup di hari ${[...new Set(conflicts.map((e) => DAYS[e.day]))].join(", ")}. Entri ditandai "Outlet tutup" di PJP (tidak dipindah otomatis).` });
     }
     setEdit(null);
     setDups(null);
@@ -251,6 +269,7 @@ export function OutletsPage() {
               <TableHead>Outlet</TableHead>
               <TableHead>Sales</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Hari kunjungan</TableHead>
               <TableHead className="text-right">Limit kredit</TableHead>
               <TableHead className="text-right">Piutang</TableHead>
               <TableHead className="w-12" />
@@ -274,6 +293,9 @@ export function OutletsPage() {
                 </TableCell>
                 <TableCell>
                   <DerivedStatus s={o.status} variant={settings.variant} />
+                </TableCell>
+                <TableCell>
+                  <VisitDaysBadge days={o.visitDays} />
                 </TableCell>
                 <TableCell className="text-right">{o.creditLimit ? rupiah(o.creditLimit) : "—"}</TableCell>
                 <TableCell className="text-right">
@@ -382,9 +404,10 @@ export function OutletsPage() {
                     ["NPWP / PKP", detail.npwp ? `${detail.npwp} · ${detail.pkp ? "PKP" : "non-PKP"}` : "—"],
                     ["Price group", detail.priceGroup],
                     ["Rute", routes.find((r) => r.id === detail.routeId)?.name ?? "—"],
+                    ["Hari kunjungan", <VisitDaysBadge days={detail.visitDays} />],
                     ["Sumber data", SOURCE_LABEL[detail.source]],
                   ].map(([k, v]) => (
-                    <div key={k} className="flex gap-2">
+                    <div key={String(k)} className="flex gap-2">
                       <span className="w-28 shrink-0 text-muted-foreground">{k}</span>
                       <span className="font-medium">{v}</span>
                     </div>
@@ -570,6 +593,32 @@ export function OutletsPage() {
                         ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label>Hari kunjungan</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {DAY_ABBR.map((d, di) => {
+                      const days = edit.visitDays?.length ? edit.visitDays : ALL_DAYS;
+                      const on = days.includes(di);
+                      return (
+                        <Button
+                          key={d}
+                          type="button"
+                          size="sm"
+                          variant={on ? "default" : "outline"}
+                          title={on ? `${DAYS[di]}: bisa dikunjungi` : `${DAYS[di]}: outlet tutup`}
+                          onClick={() => {
+                            const next = on ? days.filter((x) => x !== di) : [...days, di].sort();
+                            if (next.length) setEdit({ ...edit, visitDays: next });
+                            else toast({ tone: "warning", title: "Minimal satu hari kunjungan" });
+                          }}
+                        >
+                          {d}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Hari outlet bisa dikunjungi (default semua hari). PJP hanya menawarkan hari ini; extra call di hari tutup tetap boleh.</p>
                 </div>
                 <div className="space-y-1">
                   <Label>

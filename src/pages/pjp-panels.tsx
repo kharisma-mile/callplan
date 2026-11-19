@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useApp, salesOf } from "@/store/app-store";
 import { BRANCH_GEO, DAYS, HOLIDAYS, SALESMEN, TODAY, addDays, cycleDate, cyclePos, cycleStart, nextPjpId, prevWorkday } from "@/data/mock";
-import { FREQS, FREQ_META, callsPerCycle, generatePjp, haversineKm, isHoliday, isOn, loadMatrix, pathKm, simulateDay, validOn, weeksFor, type ExecLine } from "@/data/pjp-engine";
+import { FREQS, FREQ_META, callsPerCycle, generatePjp, haversineKm, isClosedOn, nearestDay, outletDays, isHoliday, isOn, loadMatrix, pathKm, simulateDay, validOn, weeksFor, type ExecLine } from "@/data/pjp-engine";
 import type { Frequency, Outlet, PjpEntry, PjpShift, Settings } from "@/data/types";
 import { fmtDate, nowStamp, pct } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -402,7 +402,9 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
     if (!open) return [];
     return ids.map((id) => {
       const list = outlets.filter((o) => o.salesId === id && o.active && o.status !== "baru");
+      const stats = { closedShifted: 0 };
       const gen = generatePjp({
+        stats,
         salesId: id,
         outlets: list,
         routes,
@@ -415,10 +417,11 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
       });
       const before = loadMatrix(pjp.filter((e) => e.salesId === id && validOn(e, validFrom))).flat();
       const after = loadMatrix(gen).flat();
-      return { id, gen, before, after, moved: gen.filter((e) => e.seq > 100).length };
+      return { id, gen, before, after, moved: gen.filter((e) => e.seq > 100).length, closed: stats.closedShifted };
     });
   }, [open, ids.join(","), outlets, routes, settings, target, validFrom, pjp, scope]); // eslint-disable-line react-hooks/exhaustive-deps
   const one = preview[0];
+  const closedTotal = preview.reduce((a, p) => a + p.closed, 0);
   const apply = () => {
     const set = new Set(ids);
     const fresh = preview.flatMap((p) => p.gen.map((e) => ({ ...e, id: nextPjpId() })));
@@ -429,7 +432,7 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
     ]);
     setPjpHeaders((hs) => hs.map((h) => (set.has(h.salesId) ? { ...h, version: h.version + 1, status: settings.spvEditPjpDirect ? "Disetujui" : "Draft", validFrom, validTo: undefined, note: "Hasil generate otomatis, belum dipublikasikan" } : h)));
     addAudit({ module: "PJP", action: "Generate PJP otomatis", target: ids.length === 1 ? salesOf(ids[0]).name : `${ids.length} salesman`, detail: `${fresh.length} entri · target ${target} call/hari · berlaku ${fmtDate(validFrom)}` });
-    toast({ tone: "success", title: "PJP hasil generate diterapkan", desc: `${fresh.length} entri untuk ${ids.length} salesman · berlaku mulai ${fmtDate(validFrom)} · publish untuk mengirim ke Mile Field` });
+    toast({ tone: "success", title: "PJP hasil generate diterapkan", desc: `${fresh.length} entri untuk ${ids.length} salesman${closedTotal ? ` · ${closedTotal} outlet digeser karena hari tutup` : ""} · berlaku mulai ${fmtDate(validFrom)} · publish untuk mengirim ke Mile Field` });
     onApplied(ids);
     onOpenChange(false);
   };
@@ -443,7 +446,7 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
         <div className="space-y-4 p-4">
           <p className="text-xs text-muted-foreground">
             Semua outlet memakai frekuensi default dari Pengaturan (<b>{FREQ_META[settings.defaultFreq].label}</b>); ubah per entri setelah generate. Satu hari rute (beat) per outlet dan urutan rute. F2 / F1 ditempatkan pada minggu
-            dengan beban terendah; bila hari rute melebihi target, outlet F1 / F2 digeser ke hari tetangga. {settings.generateKeepRoute ? "Rute dipertahankan" : "Rute diabaikan"}, hanya hari kerja cabang.
+            dengan beban terendah; bila hari rute melebihi target, outlet F1 / F2 digeser ke hari tetangga. Outlet yang tutup di hari rute ditempatkan di hari buka terdekat. {settings.generateKeepRoute ? "Rute dipertahankan" : "Rute diabaikan"}, hanya hari kerja cabang.
           </p>
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
@@ -482,7 +485,14 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
                 );
               })}
               <p className="text-xs text-muted-foreground md:col-span-2">
-                {one.gen.length} outlet masuk PJP · {one.moved} outlet F1 / F2 digeser ke hari tetangga untuk menyeimbangkan beban.
+                {one.gen.length} outlet masuk PJP · {one.moved} outlet F1 / F2 digeser ke hari tetangga untuk menyeimbangkan beban
+                {one.closed > 0 && (
+                  <>
+                    {" · "}
+                    <b className="text-[#6B5000]">{one.closed} outlet digeser karena hari tutup</b> (ke hari buka terdekat)
+                  </>
+                )}
+                .
               </p>
             </div>
           ) : (
@@ -495,6 +505,7 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
                     <TableHead>Call / siklus (lama → baru)</TableHead>
                     <TableHead>Rata-rata / hari</TableHead>
                     <TableHead>Hari &gt; target</TableHead>
+                    <TableHead>Digeser (hari tutup)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -512,6 +523,7 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
                         <TableCell>
                           <Badge variant={a.over ? "warning" : "success"}>{a.over}</Badge>
                         </TableCell>
+                        <TableCell className="text-xs">{p.closed ? `${p.closed} outlet digeser karena hari tutup` : "—"}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -561,12 +573,18 @@ export function ImportDialog({ open, onOpenChange, salesId, entries, validFrom }
     let line = 2;
     const ok = (o: Outlet, day: number, f: Frequency, alt: number) => {
       const weeks = weeksFor(f, alt);
+      day = nearestDay(day, outletDays(o));
       r.push({ line: line++, code: o.code, name: o.name, day: DAYS[day], freq: f, weeks: weeks.map((w) => `M${w}`).join(","), apply: { outletId: o.id, day, freq: f, weeks } });
     };
     add.forEach((o, i) => ok(o, (i * 2) % 6, settings.defaultFreq, i));
     change.forEach((o, i) => ok(o, (i + 3) % 6, i === 0 ? "F4" : settings.defaultFreq, i));
     r.push({ line: line++, code: `C-${s.branchId}-9999`, name: "—", day: "Senin", freq: "F2", weeks: "M1,M3", error: "Kode outlet tidak ditemukan" });
     r.push({ line: line++, code: other.code, name: other.name, day: "Selasa", freq: "F4", weeks: "M1-M4", error: "Outlet berada di cabang lain" });
+    const shut = own.find((o) => !add.includes(o) && !change.includes(o) && outletDays(o).length < 6);
+    if (shut) {
+      const d = [0, 1, 2, 3, 4, 5].find((x) => isClosedOn(shut, x))!;
+      r.push({ line: line++, code: shut.code, name: shut.name, day: DAYS[d], freq: settings.defaultFreq, weeks: weeksFor(settings.defaultFreq, 0).map((w) => `M${w}`).join(","), error: `Outlet tutup di hari ${DAYS[d]}` });
+    }
     if (own[0]) r.push({ line: line++, code: own[0].code, name: own[0].name, day: "Minggu", freq: "F2", weeks: "M2,M4", error: "Hari harus Senin–Sabtu" });
     if (own[1]) r.push({ line: line++, code: own[1].code, name: own[1].name, day: "Rabu", freq: "F3", weeks: "M1", error: "Frekuensi harus F1 / F2 / F4" });
     if (own[2]) r.push({ line: line++, code: own[2].code, name: own[2].name, day: "Senin & Kamis", freq: "F4", weeks: "M1-M4", error: "Satu baris hanya satu hari kunjungan; kunjungan ke-2 dalam seminggu dibuat sebagai extra call" });

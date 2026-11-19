@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
 import { DAYS, HOLIDAYS, SALESMEN, TODAY, addDays, cycleDate, cyclePos, cycleStart, nextPjpId } from "@/data/mock";
-import { FREQS, FREQ_HINT, FREQ_META, callsPerCycle, isHoliday, isOn, loadMatrix, validOn, weeksFor } from "@/data/pjp-engine";
+import { FREQS, FREQ_HINT, FREQ_META, callsPerCycle, isClosedOn, isHoliday, isOn, loadMatrix, nearestDay, outletDays, validOn, weeksFor } from "@/data/pjp-engine";
 import type { Frequency, Outlet, PjpChangeRequest, PjpEntry } from "@/data/types";
 import { fmtDate, nowStamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -154,6 +154,11 @@ export function PjpPage() {
   const moveToDay = (id: string, from: number, to: number) => {
     const e = entries.find((x) => x.id === id);
     if (!e || from === to) return;
+    const eo = outletMap.get(e.outletId);
+    if (isClosedOn(eo, to)) {
+      toast({ tone: "danger", title: `Outlet tutup di hari ${DAYS[to]}`, desc: `${eo?.name} hanya bisa dikunjungi ${outletDays(eo).map((d) => DAYS[d]).join(", ")}. Kunjungan tidak dipindah.` });
+      return;
+    }
     const seq = Math.max(0, ...entries.filter((x) => x.day === to).map((x) => x.seq)) + 1;
     update(id, { day: to, seq });
     const peak = Math.max(...e.weeks.map((w) => matrix[w - 1][to] + 1));
@@ -202,6 +207,10 @@ export function PjpPage() {
     const o = outletMap.get(form.outletId);
     if (!o) return;
     const day = Number(form.day);
+    if (isClosedOn(o, day)) {
+      toast({ tone: "danger", title: `Outlet tutup di hari ${DAYS[day]}`, desc: "Pilih hari kunjungan outlet." });
+      return;
+    }
     const route = routes.find((r) => r.salesId === salesId && r.day === day);
     const entry: PjpEntry = { id: nextPjpId(), salesId, outletId: o.id, routeId: route?.id, day, freq: form.freq, weeks: weeksFor(form.freq, Number(form.alt)), seq: Math.max(0, ...entries.filter((x) => x.day === day).map((x) => x.seq)) + 1, validFrom: form.validFrom || nextMonday(TODAY), validTo: form.validTo || undefined };
     setPjp((list) => [...list, entry]);
@@ -216,7 +225,8 @@ export function PjpPage() {
   const openAdd = (o?: Outlet) => {
     const c = o ?? candidates[0];
     const route = c?.routeId ? routeMap.get(c.routeId) : undefined;
-    const day = route?.salesId === salesId && route.day !== undefined ? route.day : matrix[0].reduce((m, _, d) => (matrix.reduce((a, w) => a + w[d], 0) < matrix.reduce((a, w) => a + w[m], 0) ? d : m), 0);
+    const base = route?.salesId === salesId && route.day !== undefined ? route.day : matrix[0].reduce((m, _, d) => (matrix.reduce((a, w) => a + w[d], 0) < matrix.reduce((a, w) => a + w[m], 0) ? d : m), 0);
+    const day = nearestDay(base, outletDays(c));
     if (o && o.salesId !== salesId) setSalesId(o.salesId);
     setForm({ outletId: c?.id ?? "", day: String(day), freq: settings.defaultFreq, alt: "0", validFrom: nextMonday(TODAY), validTo: "" });
     setAddOpen(true);
@@ -716,6 +726,11 @@ export function PjpPage() {
                                 {canUpdate && !moved && <GripVertical className="h-3 w-3 shrink-0 opacity-40" />}
                                 <span className="w-4 shrink-0 text-right text-[10px] font-semibold opacity-70">{k + 1}</span>
                                 <span className="min-w-0 flex-1 truncate">{o.name}</span>
+                                {isClosedOn(o, e.day) && (
+                                  <span className="shrink-0 rounded-sm bg-[#DC3545] px-1 text-[9px] font-semibold text-white" title={`Outlet tutup di hari ${DAYS[e.day]} (buka: ${outletDays(o).map((d) => DAYS[d]).join(", ")})`}>
+                                    Outlet tutup
+                                  </span>
+                                )}
                                 <span className="shrink-0 text-[10px] font-semibold opacity-70">{moved ? "Geser" : e.freq}</span>
                                 {canDelete && !moved && (
                                   <button onClick={() => setDelId(e.id)} className="hidden shrink-0 text-[#BF2130] group-hover:block" title="Hapus dari PJP">
@@ -824,14 +839,20 @@ export function PjpPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 {DAYS.map((d, di) => (
-                                  <SelectItem key={d} value={String(di)}>
+                                  <SelectItem key={d} value={String(di)} disabled={isClosedOn(o, di)}>
                                     {d}
+                                    {isClosedOn(o, di) ? " (tutup)" : ""}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           ) : (
                             <span className="whitespace-nowrap text-xs">{DAYS[e.day]}</span>
+                          )}
+                          {isClosedOn(o, e.day) && (
+                            <Badge variant="danger" className="mt-1 whitespace-nowrap" title={`Hari kunjungan outlet: ${outletDays(o).map((d) => DAYS[d]).join(", ")}. Pindahkan ke hari buka.`}>
+                              <AlertTriangle className="mr-1 h-3 w-3" /> Outlet tutup
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell>
@@ -1005,7 +1026,8 @@ export function PjpPage() {
                 onValueChange={(v) => {
                   const o = outletMap.get(v);
                   const r = o?.routeId ? routeMap.get(o.routeId) : undefined;
-                  setForm((f) => ({ ...f, outletId: v, day: r?.salesId === salesId && r.day !== undefined ? String(r.day) : f.day }));
+                  const want = r?.salesId === salesId && r.day !== undefined ? r.day : Number(form.day);
+                  setForm((f) => ({ ...f, outletId: v, day: String(nearestDay(want, outletDays(o))) }));
                 }}
               >
                 <SelectTrigger>
@@ -1045,11 +1067,14 @@ export function PjpPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {DAYS.map((d, i) => (
-                      <SelectItem key={d} value={String(i)}>
-                        {d} ({Math.max(...matrix.map((w) => w[i]))} call)
-                      </SelectItem>
-                    ))}
+                    {DAYS.map((d, i) => {
+                      const shut = isClosedOn(outletMap.get(form.outletId), i);
+                      return (
+                        <SelectItem key={d} value={String(i)} disabled={shut}>
+                          {d} {shut ? "(tutup)" : `(${Math.max(...matrix.map((w) => w[i]))} call)`}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
