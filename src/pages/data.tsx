@@ -203,7 +203,7 @@ function ExcelImport() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Import / Export Excel"
+        title="Import & Export Excel"
         subtitle="Varian B (standalone): data Odoo hanya dipakai sekali saat setup. Setelah go-live, perubahan data dilakukan lewat import / export Excel massal."
         action={
           canImport && (

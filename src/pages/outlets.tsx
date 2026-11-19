@@ -185,7 +185,7 @@ export function OutletsPage() {
         action={
           <>
             {can("import_outlet") && (
-              <Button variant="outline" onClick={() => toast({ tone: "info", title: "Import outlet", desc: settings.variant === "A" ? "Di Varian A master pelanggan disinkronkan dari Odoo; import hanya untuk data tambahan (segmen, sales)." : "Buka menu Import / Export Excel untuk import massal." })}>
+              <Button variant="outline" onClick={() => toast({ tone: "info", title: "Import outlet", desc: settings.variant === "A" ? "Di Varian A master pelanggan disinkronkan dari Odoo; import hanya untuk data tambahan (segmen, sales)." : "Buka menu Integration → Import & Export Excel untuk import massal." })}>
                 <Upload /> Import
               </Button>
             )}

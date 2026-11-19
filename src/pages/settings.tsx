@@ -31,8 +31,8 @@ const LABELS: Partial<Record<keyof Settings, string>> = {
   slaHours: "SLA pengingat approval (jam)",
   loa: "Tier LOA diskon",
   defaultFreq: "Frekuensi default",
-  spvEditPjpDirect: "SPV edit PJP langsung",
-  pjpApprover: "Penyetuju PJP (sebelum publish)",
+  spvEditPjpDirect: "SPV edit PJP terbit langsung",
+  pjpApprovalRequired: "PJP perlu approval Admin sebelum publish",
   pjpCallTarget: "Target call per hari",
   pjpMaxCalls: "Maksimum call per hari",
   hqCallTarget: "Target call per hari (HQ)",
@@ -223,7 +223,7 @@ export function SettingsPage() {
     toast({
       tone: "info",
       title: `Varian ${v} aktif (mode demo)`,
-      desc: v === "A" ? "Menu Data → Sinkronisasi Odoo; pesanan dikirim ke Odoo sebagai SO draft." : "Menu Data → Import / Export Excel; status pesanan dikelola di modul.",
+      desc: v === "A" ? "Menu Integration → Sinkronisasi Odoo; pesanan dikirim ke Odoo sebagai SO draft." : "Menu Integration → Import & Export Excel; status pesanan dikelola di modul.",
     });
   };
   const history = auditLog.filter((e) => e.module === "Pengaturan").slice(0, 10);
@@ -293,7 +293,7 @@ export function SettingsPage() {
         >
           {(d, set, ed) => (
             <>
-              <Row title="Approval Batal pipeline oleh SPV" hint="Default aktif (AS-15). Peluang tetap di tahapnya sampai Sales Supervisor memutuskan di Request Pipeline.">
+              <Row title="Approval Batal pipeline oleh SPV" hint="Default aktif (AS-15). Peluang tetap di tahapnya sampai Sales Supervisor memutuskan di Request → Tahap Pipeline.">
                 <Switch checked={d.pipelineBatalApproval} disabled={!ed} onChange={(v) => set({ pipelineBatalApproval: v })} />
               </Row>
               <Row title="Approval SPV per perpindahan tahap pipeline" hint="Default mati. Jika aktif, setiap perpindahan tahap menunggu approval SPV.">
@@ -551,11 +551,11 @@ export function SettingsPage() {
 
         <SettingsCard
           title="Publish, kunci & permintaan perubahan PJP"
-          keys={["publishCutoff", "lockAfterPublish", "pjpApprover", "spvEditPjpDirect", "changeRequestSlaHours"]}
+          keys={["publishCutoff", "lockAfterPublish", "pjpApprovalRequired", "spvEditPjpDirect", "changeRequestSlaHours"]}
         >
           {(d, set, ed) => (
             <>
-              <Row title="Batas publish call plan" hint="Publish paling lambat H-1 pada jam ini; bila belum, job malam menerbitkan versi Disetujui terakhir.">
+              <Row title="Batas publish call plan" hint={d.pjpApprovalRequired ? "Publish paling lambat H-1 pada jam ini; bila belum, job malam menerbitkan versi Disetujui terakhir." : "Publish paling lambat H-1 pada jam ini; bila belum, Mile Field tetap memakai versi terbit terakhir."}>
                 <div className="flex items-center gap-2 text-sm">
                   H-1 <Input type="time" className="w-28" disabled={!ed} value={d.publishCutoff} onChange={(e) => set({ publishCutoff: e.target.value })} />
                 </div>
@@ -563,10 +563,10 @@ export function SettingsPage() {
               <Row title="Kunci PJP setelah publish" hint="Perubahan sesudah publish lewat Permintaan Perubahan.">
                 <Switch checked={d.lockAfterPublish} disabled={!ed} onChange={(v) => set({ lockAfterPublish: v })} />
               </Row>
-              <Row title="Penyetuju PJP sebelum publish" hint="Draft → Menunggu Approval → Disetujui → Dipublikasikan. Wajib approval sebelum publish. Default Admin untuk PJP buatan Sales Supervisor; Admin selalu dapat memutuskan. Permission approve_pjp.">
-                <Pick value={d.pjpApprover} disabled={!ed} onChange={(v) => set({ pjpApprover: v })} options={[["admin", "Admin (default)"], ["spv", "Sales Supervisor"]]} w="w-[200px]" />
+              <Row title="PJP perlu approval Admin sebelum publish" hint="Default MATI (v1): Sales Supervisor menyusun dan langsung mempublikasikan PJP timnya (Draft → Dipublikasikan). Bila aktif: Draft → Menunggu Approval → Disetujui → Dipublikasikan; Admin menyetujui (permission approve_pjp); publish hanya untuk PJP Disetujui.">
+                <Switch checked={d.pjpApprovalRequired} disabled={!ed} onChange={(v) => set({ pjpApprovalRequired: v })} />
               </Row>
-              <Row title="SPV boleh mengubah PJP langsung (bypass approval)" hint="Default MATI. Bila aktif, edit SPV / Admin langsung berstatus Disetujui tanpa approval dan PJP terbit boleh diubah (perlu publish ulang).">
+              <Row title="SPV boleh mengubah PJP terbit langsung" hint={d.pjpApprovalRequired ? "Default MATI. Bila aktif, edit SPV / Admin langsung berstatus Disetujui tanpa approval dan PJP terbit boleh diubah (perlu publish ulang)." : "Default MATI. Bila aktif, SPV / Admin boleh mengubah PJP terbit tanpa Permintaan Perubahan (hasilnya Draft, perlu publish ulang)."}>
                 <Switch checked={d.spvEditPjpDirect} disabled={!ed} onChange={(v) => set({ spvEditPjpDirect: v })} />
               </Row>
               <Row title="SLA keputusan (jam)" hint="Lewat SLA ditandai merah di tab Permintaan Perubahan.">

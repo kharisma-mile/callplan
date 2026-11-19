@@ -80,7 +80,7 @@ export function PlottingPage() {
         <CardContent className="flex flex-wrap items-center gap-2 p-4 text-sm">
           <Info className="h-4 w-4 text-primary" />
           <span className="text-muted-foreground">Urutan setup:</span>
-          {["Territory & Tim Sales", "Plotting Pelanggan", "Assortment & Price List", "PJP (generate → approval → publikasi)", "Task kunjungan di Mile Field"].map((s, i, a) => (
+          {["Territory & Tim Sales", "Plotting Pelanggan", "Assortment & Price List", settings.pjpApprovalRequired ? "PJP (generate → approval → publikasi)" : "PJP (generate → publikasi)", "Task kunjungan di Mile Field"].map((s, i, a) => (
             <span key={s} className="flex items-center gap-2">
               <span className={cn("rounded-full px-2.5 py-0.5", i === 1 ? "bg-primary text-primary-foreground" : "bg-muted")}>{i + 1}. {s}</span>
               {i < a.length - 1 && <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />}

@@ -427,7 +427,7 @@ function PriceListTab({ readOnly }: { readOnly: boolean }) {
           ))}
         </TableBody>
       </Table>
-      {rows.length === 0 && <EmptyState title="Belum ada price list" desc="Buat price list atau import dari menu Data." />}
+      {rows.length === 0 && <EmptyState title="Belum ada price list" desc="Buat price list atau import dari menu Integration." />}
 
       <Dialog open={!!view} onOpenChange={(v) => !v && setView(null)}>
         <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto p-0">

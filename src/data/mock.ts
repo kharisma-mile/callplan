@@ -311,14 +311,11 @@ export const CLOSED_DAY_CONFLICT_SEED: string[] = [];
 export const PJP_HEADERS: PjpHeader[] = SALESMEN.map((s, i) => ({
   salesId: s.id,
   version: 2 + (i % 3),
-  status: s.id === "S-SBY-02" ? "Disetujui" : s.id === "S-SBY-03" ? "Menunggu Approval" : "Dipublikasikan",
+  // D-53: PJP approval is off by default, so unpublished seed PJPs are plain Draft (SPV publishes directly).
+  status: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? "Draft" : "Dipublikasikan",
   validFrom: "2026-10-05",
   publishedAt: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? undefined : "2026-11-16 06:00",
-  note: s.id === "S-SBY-02" ? "Disetujui, menunggu publish" : s.id === "S-SBY-03" ? "Diajukan SPV, menunggu approval" : undefined,
-  submittedBy: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? "SPV Surabaya" : undefined,
-  submittedAt: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? "2026-11-17 15:00" : undefined,
-  approvedBy: s.id === "S-SBY-02" ? "Rina Kusuma" : undefined,
-  approvedAt: s.id === "S-SBY-02" ? "2026-11-17 16:30" : undefined,
+  note: s.id === "S-SBY-02" ? "Perubahan belum dipublikasikan" : s.id === "S-SBY-03" ? "Disusun SPV Surabaya, belum dipublikasikan" : undefined,
 }));
 
 /** Holiday calendar (dummy). National holidays apply to all branches; branchIds limits a local holiday. */
@@ -502,7 +499,7 @@ export const DEFAULT_SETTINGS: Settings = {
   routeStartPoint: "branch",
   reminderTime: "07:00",
   spvEditPjpDirect: false,
-  pjpApprover: "admin",
+  pjpApprovalRequired: false,
   loa: [
     { role: "sales", label: "Sales (tanpa approval)", max: 2 },
     { role: "spv", label: "Sales Supervisor", max: 5 },

@@ -430,7 +430,7 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
       ...list.flatMap((e) => (!set.has(e.salesId) || (e.validTo && e.validTo < validFrom) ? [e] : e.validFrom >= validFrom ? [] : [{ ...e, validTo: end }])),
       ...fresh,
     ]);
-    setPjpHeaders((hs) => hs.map((h) => (set.has(h.salesId) ? { ...h, version: h.version + 1, status: settings.spvEditPjpDirect ? "Disetujui" : "Draft", validFrom, validTo: undefined, note: "Hasil generate otomatis, belum dipublikasikan" } : h)));
+    setPjpHeaders((hs) => hs.map((h) => (set.has(h.salesId) ? { ...h, version: h.version + 1, status: settings.spvEditPjpDirect && settings.pjpApprovalRequired ? "Disetujui" : "Draft", validFrom, validTo: undefined, note: "Hasil generate otomatis, belum dipublikasikan" } : h)));
     addAudit({ module: "PJP", action: "Generate PJP otomatis", target: ids.length === 1 ? salesOf(ids[0]).name : `${ids.length} salesman`, detail: `${fresh.length} entri · target ${target} call/hari · berlaku ${fmtDate(validFrom)}` });
     toast({ tone: "success", title: "PJP hasil generate diterapkan", desc: `${fresh.length} entri untuk ${ids.length} salesman${closedTotal ? ` · ${closedTotal} outlet digeser karena hari tutup` : ""} · berlaku mulai ${fmtDate(validFrom)} · publish untuk mengirim ke Mile Field` });
     onApplied(ids);

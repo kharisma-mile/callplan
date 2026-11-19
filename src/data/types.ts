@@ -64,7 +64,7 @@ export interface Spv {
   branchId: string;
 }
 
-/** Role definition: 6 built-in roles + roles created in Pengguna & Role (module 12). */
+/** Role definition: 6 built-in roles + roles created in Setting → Role (module 12). */
 export interface RoleDef {
   key: string;
   label: string;
@@ -395,10 +395,10 @@ export interface Settings {
   routeStartPoint: "branch" | "home";
   /** Daily call plan push reminder (HH:MM). */
   reminderTime: string;
-  /** Bypass: SPV / Admin edit PJP langsung tanpa approval (default off). */
+  /** Bypass: SPV / Admin edit a published PJP directly without a change request (default off). */
   spvEditPjpDirect: boolean;
-  /** Who approves a PJP before publish (permission approve_pjp); Admin can always decide. */
-  pjpApprover: "admin" | "spv";
+  /** D-53: PJP needs Admin approval (approve_pjp) before publish (default off in v1: Sales Supervisor publishes its own team's PJP directly). */
+  pjpApprovalRequired: boolean;
   /** Module 02 assortment: segment without assortment offers all active products ("all") or nothing ("none"). */
   assortmentFallback: "all" | "none";
   /** Module 03 plotting, Varian A: write the outlet owner back to Odoo (res.partner.user_id). */

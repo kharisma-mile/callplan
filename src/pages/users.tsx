@@ -21,32 +21,39 @@ import { cn } from "@/lib/utils";
 
 const NONE = "__none__";
 
+/** D-53: Users, Role, Permission and Audit Log are separate menu items under Setting. */
 export function UsersPage() {
-  const { can } = useApp();
-  const tabs = [
-    ...(can("view_any_user") ? ([["users", "Pengguna"]] as const) : []),
-    ...(can("view_any_role") ? ([["roles", "Role"], ["matrix", "Permission"]] as const) : []),
-    ...(can("view_any_user") ? ([["audit", "Audit"]] as const) : []),
-  ];
-  const [tab, setTab] = useState<string>(tabs[0]?.[0] ?? "users");
-
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Pengguna & Role"
-        subtitle="RBAC milik modul; pengguna masuk lewat MileApp (tanpa login modul) dan disinkronkan dari MileApp; permission mengikuti pola {aksi}_{resource} per halaman + custom permission (approve_*, import_*, export_*)."
-      />
-      <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-muted p-1">
-        {tabs.map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium", tab === k ? "bg-background text-primary shadow-sm" : "text-muted-foreground")}>
-            {l}
-          </button>
-        ))}
-      </div>
-      {tab === "users" && <UsersTab />}
-      {tab === "roles" && <RolesTab />}
-      {tab === "matrix" && <MatrixTab />}
-      {tab === "audit" && <AuditTab />}
+      <PageHeader title="Users" subtitle="Pengguna masuk lewat MileApp (tanpa login modul) dan disinkronkan dari MileApp; di sini Admin menetapkan role dan mengunci akun." />
+      <UsersTab />
+    </div>
+  );
+}
+
+export function RolesPage() {
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Role" subtitle="RBAC milik modul: role bawaan (Admin, Sales Supervisor) dan role tambahan dengan cakupan data (semua cabang, cabang sendiri, tim sendiri)." />
+      <RolesTab />
+    </div>
+  );
+}
+
+export function PermissionPage() {
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Permission" subtitle="Permission per role mengikuti pola {aksi}_{resource} per halaman + custom permission (approve_*, publish_*, import_*, export_*)." />
+      <MatrixTab />
+    </div>
+  );
+}
+
+export function AuditLogPage() {
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Audit Log" subtitle="Aktivitas pengguna, role, pengaturan dan data master. Log tidak dapat diubah / dihapus." />
+      <AuditTab />
     </div>
   );
 }

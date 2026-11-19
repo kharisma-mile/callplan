@@ -11,7 +11,7 @@ import { ApprovalPage } from "@/pages/approvals";
 import { OrdersPage } from "@/pages/orders";
 import { TargetsPage } from "@/pages/targets";
 import { DataPage } from "@/pages/data";
-import { UsersPage } from "@/pages/users";
+import { AuditLogPage, PermissionPage, RolesPage, UsersPage } from "@/pages/users";
 import { SettingsPage } from "@/pages/settings";
 import { ProductsPage } from "@/pages/products";
 import { TerritoryPage } from "@/pages/territory";
@@ -60,6 +60,9 @@ function Shell() {
         targets: <TargetsPage />,
         data: <DataPage />,
         users: <UsersPage />,
+        roles: <RolesPage />,
+        permissions: <PermissionPage />,
+        "audit-log": <AuditLogPage />,
         settings: <SettingsPage />,
         products: <ProductsPage />,
         territory: <TerritoryPage />,

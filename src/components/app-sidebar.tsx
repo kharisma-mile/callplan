@@ -18,6 +18,9 @@ import {
   type LucideIcon,
   Users2,
   ListChecks,
+  UserCog,
+  KeyRound,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/store/app-store";
@@ -29,7 +32,7 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   perm: string | string[];
-  group: "Dashboard" | "Master" | "Sales Operation" | "Request" | "Report";
+  group: "Dashboard" | "Master" | "Sales Operation" | "Request" | "Report" | "Integration" | "Setting";
   /** Request page: badge counts pending requests of these types the user can act on. */
   requests?: ApprovalType[];
 }
@@ -47,7 +50,7 @@ export const REPORT_PERMS = [
   "adoption",
 ].map((r) => `view_any_${r}`);
 
-/** D-52 navigation: Dashboard · Master · Sales Operation · Request · Report (admin-only items gated by permission). */
+/** D-53 navigation: Dashboard · Master · Sales Operation · Request · Report · Integration · Setting (Integration / Setting are Admin-only through permissions). */
 export function useNav(): NavItem[] {
   const { settings } = useApp();
   const req = (page: RequestPage) => REQUEST_PAGES[page].types;
@@ -58,9 +61,6 @@ export function useNav(): NavItem[] {
     { key: "products", label: "Produk & Price List", icon: Boxes, perm: ["view_any_product", "view_any_price_list"], group: "Master" },
     { key: "assortment", label: "Assortment Produk", icon: ListChecks, perm: "view_any_assortment", group: "Master" },
     { key: "territory", label: "Territory & Tim Sales", icon: MapPinned, perm: ["view_any_branch", "view_any_region", "view_any_route", "view_any_sales_team"], group: "Master" },
-    { key: "data", label: settings.variant === "A" ? "Sinkronisasi Odoo" : "Import / Export Excel", icon: Database, perm: "view_any_data", group: "Master" },
-    { key: "users", label: "Pengguna & Role", icon: ShieldCheck, perm: ["view_any_user", "view_any_role"], group: "Master" },
-    { key: "settings", label: "Pengaturan", icon: Settings, perm: "view_any_setting", group: "Master" },
     { key: "pjp", label: "PJP / Call Plan", icon: CalendarRange, perm: "view_any_pjp", group: "Sales Operation" },
     { key: "plotting", label: "Plotting Pelanggan", icon: Users2, perm: "view_any_outlet_assignment", group: "Sales Operation" },
     { key: "pipeline", label: "Pipeline", icon: GitBranch, perm: "view_any_opportunity", group: "Sales Operation" },
@@ -68,8 +68,14 @@ export function useNav(): NavItem[] {
     { key: "targets", label: "Target", icon: Target, perm: "view_any_target", group: "Sales Operation" },
     { key: "request/loa", label: "LOA", icon: BadgePercent, perm: reqPerm("loa"), group: "Request", requests: req("loa") },
     { key: "request/noo", label: "New Customer", icon: UserPlus, perm: reqPerm("noo"), group: "Request", requests: req("noo") },
-    { key: "request/pipeline", label: "Pipeline", icon: Workflow, perm: reqPerm("pipeline"), group: "Request", requests: req("pipeline") },
+    { key: "request/pipeline", label: "Tahap Pipeline", icon: Workflow, perm: reqPerm("pipeline"), group: "Request", requests: req("pipeline") },
     { key: "reports", label: "Laporan", icon: BarChart3, perm: REPORT_PERMS, group: "Report" },
+    { key: "data", label: settings.variant === "A" ? "Sinkronisasi Odoo" : "Import & Export Excel", icon: Database, perm: "view_any_data", group: "Integration" },
+    { key: "settings", label: "Pengaturan", icon: Settings, perm: "view_any_setting", group: "Setting" },
+    { key: "users", label: "Users", icon: UserCog, perm: "view_any_user", group: "Setting" },
+    { key: "roles", label: "Role", icon: ShieldCheck, perm: "view_any_role", group: "Setting" },
+    { key: "permissions", label: "Permission", icon: KeyRound, perm: "view_any_role", group: "Setting" },
+    { key: "audit-log", label: "Audit Log", icon: ScrollText, perm: "view_any_audit_log", group: "Setting" },
   ];
 }
 
