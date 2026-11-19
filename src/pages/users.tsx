@@ -460,8 +460,8 @@ function MatrixTab() {
   const meta = roleMeta(role);
   const editable = can("update_role");
   const perms = new Set(permissions[role] ?? []);
-  /** D-54 (Shield): approval permissions (incl. LOA tiers from Setting) live in their page group; checking them changes who can approve immediately. */
-  const RESOURCES = resourcesFor(settings.loa);
+  /** D-54 (Shield): approval permissions (incl. LOA tiers and chain steps from Setting) live in their page group; checking them changes who can approve immediately. */
+  const RESOURCES = resourcesFor(settings.loa, settings.approvalChains);
   const groups = Array.from(new Set(RESOURCES.map((r) => r.group)));
   /** Lock-out guard: the role you are using keeps access to this page. */
   const guarded = (perm: string) => role === session.role && (perm === "view_any_role" || perm === "update_role");

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Database, FileSpreadsheet, Lock, Minus, Plus, Save, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Database, FileSpreadsheet, Minus, Plus, Save, Trash2, TriangleAlert } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,10 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/switch";
 import { useApp } from "@/store/app-store";
 import { BRANCHES, HOLIDAYS } from "@/data/mock";
-import type { Frequency, Settings, Variant } from "@/data/types";
+import type { ChainStep, ChainType, Frequency, Settings, Variant } from "@/data/types";
 import { FREQS, FREQ_HINT, FREQ_META } from "@/data/pjp-engine";
 import { fmtDate } from "@/lib/format";
-import { APPROVAL_CHAINS, loaBand } from "@/lib/approval";
+import { loaBand, nooCreditStepIndex } from "@/lib/approval";
 import { rolesHolding } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,7 @@ const LABELS: Partial<Record<keyof Settings, string>> = {
   discountBasis: "Ukuran diskon",
   slaHours: "SLA pengingat approval (jam)",
   loa: "Tier LOA diskon",
+  approvalChains: "Rantai approval",
   defaultFreq: "Frekuensi default",
   spvEditPjpDirect: "Edit PJP terbit langsung (update_pjp)",
   pjpApprovalRequired: "PJP perlu approval sebelum publish (pemegang approve_pjp)",
@@ -92,7 +93,13 @@ function SettingsCard({
   const save = () => {
     setSettings((s) => ({ ...s, ...draft }));
     changed.forEach((k) =>
-      addAudit({ module: "Pengaturan", action: "Pengaturan disimpan", target: LABELS[k] ?? k, detail: k === "loa" ? merged.loa.map((t) => `${t.label} ${t.max ?? "∞"}${t.permission ? ` (${t.permission})` : ""}`).join(", ") : `${show(settings[k])} → ${show(merged[k])}` })
+      addAudit({ module: "Pengaturan", action: "Pengaturan disimpan", target: LABELS[k] ?? k, detail:
+          k === "loa"
+            ? merged.loa.map((t) => `${t.label} ${t.max ?? "∞"}${t.permission ? ` (${t.permission})` : ""}`).join(", ")
+            : k === "approvalChains"
+              ? CHAIN_TYPES.map(([t, l]) => `${l}: ${merged.approvalChains[t].map((st) => st.permission).join(" → ")}`).join(" · ")
+              : `${show(settings[k])} → ${show(merged[k])}`,
+      })
     );
     setDraft({});
     toast({ tone: "success", title: `${title} disimpan`, desc: "Perubahan berlaku untuk permintaan / dokumen baru." });
@@ -348,48 +355,37 @@ export function SettingsPage() {
           {(d, set, ed) => <LoaEditor loa={d.loa} editable={ed} onChange={(loa) => set({ loa })} />}
         </SettingsCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              Rantai approval <Badge variant="neutral"><Lock className="mr-1 h-3 w-3" /> read-only · diubah lewat konfigurasi deployment</Badge>
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Setiap langkah = satu permission. Request masuk ke semua pengguna yang role-nya memegang permission langkah tersebut dan cakupan datanya (tim / cabang / semua) mencakup request. Atur siapa pemegangnya di Setting → Role.
-            </p>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">No.</TableHead>
-                  <TableHead>Jenis</TableHead>
-                  <TableHead>Langkah</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {[
-                  [
-                    "Diskon (LOA)",
-                    settings.discountTierMode === "single"
-                      ? `1 langkah, tier yang mencakup: ${settings.loa.filter((t) => t.permission).map((t) => `${t.label} → ${t.permission}`).join(" · ")} (tier di atasnya juga boleh)`
-                      : `Berurutan per tier: ${settings.loa.filter((t) => t.permission).map((t) => t.permission).join(" → ")}`,
-                  ],
-                  ["Pesanan Khusus (LOA)", APPROVAL_CHAINS.special_order.map((st, i) => `Langkah ${i + 1} · ${st.label} (${st.permission})`).join(" → ")],
-                  ["Limit Kredit (LOA)", `${APPROVAL_CHAINS.credit_override[0].label} (${APPROVAL_CHAINS.credit_override[0].permission})`],
-                  ["New Customer (NOO)", APPROVAL_CHAINS.noo.map((st, i) => `Langkah ${i + 1} · ${st.label} (${st.permission})`).join(" → ") + " — langkah 2 menetapkan limit kredit, TOP, price group"],
-                  ["Pipeline", settings.pipelineStageApproval ? "Setiap perpindahan tahap (approve_pipeline_stage)" : settings.pipelineBatalApproval ? "Batal saja (approve_pipeline_stage)" : "Tidak aktif"],
-                  ["PJP", settings.pjpApprovalRequired ? "Sebelum publish (approve_pjp)" : "Tidak aktif (pemegang publish_pjp langsung publish)"],
-                ].map(([k, v], i) => (
-                  <TableRow key={k}>
-                    <TableCell>{i + 1}</TableCell>
-                    <TableCell className="font-medium">{k}</TableCell>
-                    <TableCell className="text-sm">{v}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <SettingsCard
+          title="Rantai approval"
+          className="xl:col-span-2"
+          keys={["approvalChains"]}
+          validate={(d) => (CHAIN_TYPES.some(([t]) => d.approvalChains[t].some((st) => !st.label.trim())) ? "Nama langkah wajib diisi." : null)}
+        >
+          {(d, set, ed) => (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Setiap langkah = satu permission. Request masuk ke semua pengguna yang role-nya memegang permission langkah tersebut dan cakupan datanya (tim / cabang / semua) mencakup request. Atur siapa pemegangnya di Setting → Role. Perubahan rantai berlaku untuk request baru; request yang sudah dibuat tetap memakai langkah saat dibuat.
+              </p>
+              {CHAIN_TYPES.map(([t, label]) => (
+                <ChainEditor key={t} type={t} title={label} steps={d.approvalChains[t]} editable={ed} onChange={(steps) => set({ approvalChains: { ...d.approvalChains, [t]: steps } })} />
+              ))}
+              <div className="space-y-1 border-t pt-3 text-xs text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">Diskon (LOA):</span>{" "}
+                  {d.discountTierMode === "single"
+                    ? `1 langkah, tier yang mencakup: ${d.loa.filter((x) => x.permission).map((x) => `${x.label} → ${x.permission}`).join(" · ")} (tier di atasnya juga boleh)`
+                    : `Berurutan per tier: ${d.loa.filter((x) => x.permission).map((x) => x.permission).join(" → ")}`}{" "}
+                  — atur di Tier LOA diskon.
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Kapan Tahap Pipeline diminta:</span>{" "}
+                  {d.pipelineStageApproval ? "setiap perpindahan tahap" : d.pipelineBatalApproval ? "Batal saja" : "tidak aktif"}.{" "}
+                  <span className="font-medium text-foreground">PJP:</span> {d.pjpApprovalRequired ? "sebelum publish (approve_pjp)" : "tidak aktif (pemegang publish_pjp langsung publish)"}.
+                </p>
+              </div>
+            </>
+          )}
+        </SettingsCard>
 
         <SettingsCard
           title="PJP / call plan"
@@ -718,5 +714,94 @@ function LoaEditor({ loa, editable, onChange }: { loa: Settings["loa"]; editable
         Contoh tier (≤ 2% tanpa approval, 2–5% approve_discount_tier_1, di atasnya approve_discount_tier_2) — angka final ditetapkan UP. Tier baru menambah permission <code className="font-mono">approve_discount_tier_n</code> di Setting → Role (grup Request) dan belum dipegang role mana pun sampai diberikan. Perubahan berlaku untuk permintaan diskon baru.
       </p>
     </>
+  );
+}
+
+const CHAIN_TYPES: [ChainType, string][] = [
+  ["special_order", "Pesanan Khusus (LOA)"],
+  ["noo", "New Customer (NOO)"],
+  ["credit_override", "Limit Kredit (LOA)"],
+  ["pipeline_stage", "Tahap Pipeline"],
+];
+
+/** D-54: ordered chain steps per request type. Adding a step adds permission `approve_<type>_step_n` (Setting → Role, grup Request), held by no role yet. */
+function ChainEditor({ type, title, steps, editable, onChange }: { type: ChainType; title: string; steps: ChainStep[]; editable: boolean; onChange: (steps: ChainStep[]) => void }) {
+  const { permissions, roles } = useApp();
+  const creditIdx = type === "noo" ? nooCreditStepIndex(steps) : -1;
+  const addStep = () => {
+    let n = steps.length + 1;
+    while (steps.some((st) => st.permission === `approve_${type}_step_${n}`)) n++;
+    onChange([...steps, { label: `Langkah ${steps.length + 1}`, permission: `approve_${type}_step_${n}` }]);
+  };
+  const move = (i: number, dir: -1 | 1) => {
+    const next = [...steps];
+    [next[i], next[i + dir]] = [next[i + dir], next[i]];
+    onChange(next);
+  };
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{title}</p>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12">No.</TableHead>
+            <TableHead>Nama langkah</TableHead>
+            <TableHead>Permission penyetuju</TableHead>
+            {editable && <TableHead className="w-[120px] text-right">Aksi</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {steps.map((st, i) => {
+            const holders = rolesHolding(st.permission, permissions, roles);
+            return (
+              <TableRow key={st.permission}>
+                <TableCell>{i + 1}</TableCell>
+                <TableCell>
+                  {editable ? (
+                    <Input className="h-[31px]" value={st.label} onChange={(e) => onChange(steps.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+                  ) : (
+                    <span className="font-medium">{st.label}</span>
+                  )}
+                  {i === creditIdx && <p className="mt-1 text-xs text-[#01496A]">Menetapkan limit kredit, TOP dan price group</p>}
+                </TableCell>
+                <TableCell>
+                  <code className="font-mono text-xs">{st.permission}</code>
+                  <p className={cn("text-xs", holders.length ? "text-muted-foreground" : "text-[#BF2130]")}>
+                    {holders.length ? `dipegang oleh role: ${holders.join(", ")}` : "belum dipegang role mana pun — atur di Setting → Role"}
+                  </p>
+                </TableCell>
+                {editable && (
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" className="px-2" disabled={i === 0} onClick={() => move(i, -1)} title="Naikkan urutan">
+                        <ArrowUp />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="px-2" disabled={i === steps.length - 1} onClick={() => move(i, 1)} title="Turunkan urutan">
+                        <ArrowDown />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="px-2 text-[#DC3545] hover:bg-[#FAE5E7] hover:text-[#68121A]"
+                        disabled={steps.length <= 1}
+                        onClick={() => onChange(steps.filter((_, j) => j !== i))}
+                        title={steps.length <= 1 ? "Minimal 1 langkah" : "Hapus langkah"}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </TableCell>
+                )}
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      {editable && (
+        <Button size="sm" variant="outline" onClick={addStep}>
+          <Plus /> Tambah langkah
+        </Button>
+      )}
+    </div>
   );
 }

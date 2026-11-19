@@ -237,6 +237,8 @@ export interface ApprovalStep {
   label: string;
   permission: string;
   alsoPermissions?: string[];
+  /** NOO: this step sets credit limit / TOP / price group (step holding approve_noo_credit, else the last step). */
+  setsCredit?: boolean;
   status: "pending" | "approved" | "rejected" | "waiting";
   by?: string;
   at?: string;
@@ -340,6 +342,13 @@ export interface LoaTier {
   permission: string | null;
 }
 
+/** D-54: request types with a configurable multi-step chain (discount uses LOA tiers instead). */
+export type ChainType = "special_order" | "noo" | "credit_override" | "pipeline_stage";
+export interface ChainStep {
+  label: string;
+  permission: string;
+}
+
 export interface Settings {
   variant: Variant;
   pipelineStageApproval: boolean;
@@ -348,6 +357,8 @@ export interface Settings {
   existingCustomerPipeline: boolean;
   overdueDays: number;
   loa: LoaTier[];
+  /** D-54: ordered approval steps per request type (each step = one permission), editable in Setting. */
+  approvalChains: Record<ChainType, ChainStep[]>;
   /** Module 06 FR-002: approval requests created automatically on order ingest (PRD default) or manually from order review. */
   approvalTrigger: "auto" | "manual";
   /** Single covering tier (PRD default) or sequential through every tier below. */

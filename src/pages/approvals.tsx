@@ -64,8 +64,8 @@ export function ApprovalPage({ page }: { page: RequestPage }) {
   const [decision, setDecision] = useState<{ id: string; approve: boolean; reason: string; limit?: number; top?: number; priceGroup?: string } | null>(null);
   const decA = decision ? approvals.find((a) => a.id === decision.id) : undefined;
   const decStep = decA?.steps.find((s) => s.status === "pending");
-  /** NOO step approve_noo_credit must set credit limit, TOP and price group before approving (module 06 FR-010). */
-  const needsCredit = !!decision?.approve && decA?.type === "noo" && decStep?.permission === "approve_noo_credit";
+  /** NOO credit step (approve_noo_credit, else the last step) must set credit limit, TOP and price group before approving (module 06 FR-010). */
+  const needsCredit = !!decision?.approve && decA?.type === "noo" && !!decStep?.setsCredit;
   const lateSla = (a: ApprovalRequest) => a.status === "pending" && hoursSince(a.createdAt) > settings.slaHours;
   const perms = Array.from(new Set(types.flatMap((t) => approvalPerms(t, settings))));
   const hasApprove = perms.some(can);
@@ -349,7 +349,7 @@ export function ApprovalPage({ page }: { page: RequestPage }) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <p className="col-span-3 text-xs text-[#01496A]">Wajib diisi pada langkah approve_noo_credit sebelum menyetujui. Nilai ini dipakai saat pelanggan diaktifkan{settings.variant === "A" ? " dan dibuat di Odoo (res.partner)" : ""}.</p>
+                  <p className="col-span-3 text-xs text-[#01496A]">Wajib diisi pada langkah kredit ({decStep?.permission}) sebelum menyetujui. Nilai ini dipakai saat pelanggan diaktifkan{settings.variant === "A" ? " dan dibuat di Odoo (res.partner)" : ""}.</p>
                 </div>
               )}
               {!decision.approve && decA?.orderId && <p className="text-xs text-[#BF2130]">Menolak permintaan ini membuat pesanan terkait berstatus Ditolak.</p>}

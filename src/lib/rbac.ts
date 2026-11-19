@@ -1,4 +1,4 @@
-import type { ApprovalType, LoaTier, RoleDef, RoleKey } from "@/data/types";
+import type { ApprovalType, ChainStep, ChainType, LoaTier, RoleDef, RoleKey } from "@/data/types";
 
 /** Shield-style resources: every page gets CRUD permissions `{action}_{resource}`. */
 export const CRUD = ["view_any", "view", "create", "update", "delete"] as const;
@@ -50,15 +50,19 @@ export const RESOURCES: ResourceDef[] = [
   { key: "audit_log", label: "Audit Log", group: "Setting", crud: ["view_any"], custom: [] },
 ];
 
-/** D-54: LOA discount tier permissions follow the tiers configured in Setting (adding a tier adds `approve_discount_tier_n`). */
-export function resourcesFor(loa?: LoaTier[]): ResourceDef[] {
-  if (!loa) return RESOURCES;
-  const tiers = loa.map((t) => t.permission).filter((x): x is string => !!x);
-  return RESOURCES.map((r) => (r.key === "discount" ? { ...r, custom: tiers } : r));
+/** D-54: LOA discount tier permissions follow the tiers configured in Setting (adding a tier adds `approve_discount_tier_n`);
+ *  chain request permissions follow the chains in Setting (adding a step adds `approve_<type>_step_n`). */
+export function resourcesFor(loa?: LoaTier[], chains?: Record<ChainType, ChainStep[]>): ResourceDef[] {
+  return RESOURCES.map((r) => {
+    if (loa && r.key === "discount") return { ...r, custom: loa.map((t) => t.permission).filter((x): x is string => !!x) };
+    const chain = chains?.[r.key as ChainType];
+    if (chain) return { ...r, custom: Array.from(new Set(chain.map((s) => s.permission))) };
+    return r;
+  });
 }
 
-export function allPermissions(loa?: LoaTier[]): string[] {
-  return resourcesFor(loa).flatMap((r) => [...r.crud.map((a) => `${a}_${r.key}`), ...r.custom]);
+export function allPermissions(loa?: LoaTier[], chains?: Record<ChainType, ChainStep[]>): string[] {
+  return resourcesFor(loa, chains).flatMap((r) => [...r.crud.map((a) => `${a}_${r.key}`), ...r.custom]);
 }
 
 /** Labels of the roles currently holding a permission (info only: approval routing never looks at role names). */

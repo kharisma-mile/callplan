@@ -456,6 +456,20 @@ export function outletTotal(o: Order) {
   return Math.round(gross * (1 - o.discountPct / 100));
 }
 
+/** D-54 seed chains (editable in Setting → Rantai approval). */
+export const DEFAULT_APPROVAL_CHAINS: Settings["approvalChains"] = {
+  special_order: [
+    { label: "Review harga khusus", permission: "approve_special_order" },
+    { label: "Persetujuan final", permission: "approve_special_order_final" },
+  ],
+  noo: [
+    { label: "Verifikasi data", permission: "approve_noo" },
+    { label: "Kredit pelanggan", permission: "approve_noo_credit" },
+  ],
+  credit_override: [{ label: "Kelonggaran limit kredit", permission: "approve_credit_override" }],
+  pipeline_stage: [{ label: "Perpindahan tahap", permission: "approve_pipeline_stage" }],
+};
+
 export const DEFAULT_SETTINGS: Settings = {
   variant: "A",
   pipelineStageApproval: false,
@@ -504,6 +518,7 @@ export const DEFAULT_SETTINGS: Settings = {
     { label: "Tier 1", max: 5, permission: "approve_discount_tier_1" },
     { label: "Tier 2", max: null, permission: "approve_discount_tier_2" },
   ],
+  approvalChains: DEFAULT_APPROVAL_CHAINS,
   assortmentFallback: "all",
   odooWriteBackSalesperson: false,
 };

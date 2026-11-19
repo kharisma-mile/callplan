@@ -18,24 +18,16 @@ export function loaBand(loa: LoaTier[], i: number): string {
   return t.max === null ? `> ${prev}%` : i === 0 ? `≤ ${t.max}%` : `${prev}–${t.max}%`;
 }
 
-/** D-54: fixed multi-step chains (ordered steps, each = one permission). Configured per deployment. */
-export const APPROVAL_CHAINS: Record<"special_order" | "noo" | "credit_override" | "pipeline_stage", { label: string; permission: string }[]> = {
-  special_order: [
-    { label: "Review harga khusus", permission: "approve_special_order" },
-    { label: "Persetujuan final", permission: "approve_special_order_final" },
-  ],
-  noo: [
-    { label: "Verifikasi data", permission: "approve_noo" },
-    { label: "Kredit pelanggan", permission: "approve_noo_credit" },
-  ],
-  credit_override: [{ label: "Kelonggaran limit kredit", permission: "approve_credit_override" }],
-  pipeline_stage: [{ label: "Perpindahan tahap", permission: "approve_pipeline_stage" }],
-};
+/** D-54: NOO step that sets credit limit / TOP / price group: the step holding approve_noo_credit, else the last step. */
+export function nooCreditStepIndex(steps: { permission: string }[]): number {
+  const i = steps.findIndex((s) => s.permission === "approve_noo_credit");
+  return i >= 0 ? i : steps.length - 1;
+}
 
 /** Every permission that can decide some step of a request type (header pills, permission hints). */
 export function approvalPerms(type: ApprovalType, settings: Settings): string[] {
   if (type === "discount") return settings.loa.map((t) => t.permission).filter((x): x is string => !!x);
-  return APPROVAL_CHAINS[type].map((s) => s.permission);
+  return settings.approvalChains[type].map((s) => s.permission);
 }
 
 /** Permissions accepted for a step (its own + alternatives such as higher LOA tiers). */
@@ -56,7 +48,7 @@ export function stepApproverText(s: ApprovalStep): string {
  *  or every tier from the first approval tier up to the covering one (sequential). */
 export function buildSteps(type: ApprovalType, opts: { discountPct?: number; settings: Settings }): ApprovalStep[] {
   const { settings } = opts;
-  const mk = (s: { label: string; permission: string; alsoPermissions?: string[] }, i: number): ApprovalStep => ({ ...s, status: i === 0 ? "pending" : "waiting" });
+  const mk = (s: { label: string; permission: string; alsoPermissions?: string[]; setsCredit?: boolean }, i: number): ApprovalStep => ({ ...s, status: i === 0 ? "pending" : "waiting" });
   if (type === "discount") {
     const loa = settings.loa;
     const cover = loaTierFor(opts.discountPct ?? 0, loa);
@@ -70,7 +62,10 @@ export function buildSteps(type: ApprovalType, opts: { discountPct?: number; set
     const higher = loa.slice(ci + 1).map((t) => t.permission).filter((x): x is string => !!x);
     return [mk({ ...tierStep(ci), alsoPermissions: higher.length ? higher : undefined }, 0)];
   }
-  return APPROVAL_CHAINS[type].map(mk);
+  // D-54: chain read from Setting at creation time (changes apply to new requests only)
+  const chain = settings.approvalChains[type];
+  const ci = type === "noo" ? nooCreditStepIndex(chain) : -1;
+  return chain.map((s, i) => mk(i === ci ? { ...s, setsCredit: true } : s, i));
 }
 
 export interface OrderCheck {
