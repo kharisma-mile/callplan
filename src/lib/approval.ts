@@ -1,14 +1,6 @@
 import type { ApprovalStep, ApprovalType, LoaTier, Order, Outlet, RoleKey, Settings } from "@/data/types";
 import { productById } from "@/data/mock";
 
-const RANK: RoleKey[] = ["spv", "bm", "cd"];
-
-/** Roles at or above a tier role in the discount hierarchy (Admin always may act). */
-function atOrAbove(role: RoleKey): RoleKey[] {
-  const i = RANK.indexOf(role);
-  return [...(i < 0 ? RANK : RANK.slice(i)), "admin"];
-}
-
 /** Which LOA tier a discount % falls into. Returns null when Sales may give it without approval. */
 export function loaTierFor(pctValue: number, loa: LoaTier[]): LoaTier | null {
   for (let i = 0; i < loa.length; i++) {
@@ -18,40 +10,29 @@ export function loaTierFor(pctValue: number, loa: LoaTier[]): LoaTier | null {
   return loa[loa.length - 1];
 }
 
-const TIER_ROLE_LABEL: Partial<Record<RoleKey, string>> = { spv: "Sales SPV", bm: "Branch Manager", cd: "Commercial Director" };
-
-/** Module 06 FR-003. Discount: one step at the single covering tier (PRD default; superiors may also decide),
- *  or one step per tier from SPV up to the covering tier when `discountTierMode = sequential`. */
+/** D-52: two roles. Sales Supervisor decides within its tier; above it (and every second step) goes to Admin.
+ *  Admin may always act on any step. Discount: single covering tier (default) or SPV → Admin when `sequential`. */
 export function buildSteps(type: ApprovalType, opts: { discountPct?: number; settings: Settings }): ApprovalStep[] {
   const { settings } = opts;
-  const loa = settings.loa;
   const mk = (label: string, roles: RoleKey[], first: boolean): ApprovalStep => ({ label, roles, status: first ? "pending" : "waiting" });
+  const spv = (label: string, first = true) => mk(label, ["spv", "admin"], first);
+  const admin = (label: string, first = true) => mk(label, ["admin"], first);
   switch (type) {
     case "discount": {
-      const tier = loaTierFor(opts.discountPct ?? 0, loa);
-      const role = tier?.role ?? "spv";
-      if (settings.discountTierMode === "sequential") {
-        const upto = RANK.indexOf(role);
-        return RANK.slice(0, upto + 1).map((r, i) => {
-          const t = loa.find((x) => x.role === r);
-          return mk(`LOA: ${TIER_ROLE_LABEL[r]}${t?.max != null ? ` (≤ ${t.max}%)` : ""}`, [r, "admin"], i === 0);
-        });
-      }
-      const label = tier ? `LOA: ${tier.label}${tier.max !== null ? ` (≤ ${tier.max}%)` : ""}` : "LOA";
-      return [mk(label, atOrAbove(role), true)];
+      const spvTier = settings.loa.find((t) => t.role === "spv");
+      const spvLabel = `LOA: Sales Supervisor${spvTier?.max != null ? ` (≤ ${spvTier.max}%)` : ""}`;
+      const aboveSpv = loaTierFor(opts.discountPct ?? 0, settings.loa)?.role === "admin";
+      if (!aboveSpv) return [spv(spvLabel)];
+      return settings.discountTierMode === "sequential" ? [spv(spvLabel), admin("LOA: Admin", false)] : [admin("LOA: Admin (di atas tier Supervisor)")];
     }
     case "special_order":
-      return [mk("Branch Manager", ["bm", "admin"], true), mk("Commercial Director", ["cd", "admin"], false)];
-    case "credit_override": {
-      const roles: RoleKey[] =
-        settings.creditApprover === "finance" ? ["finance", "admin"] : settings.creditApprover === "bm" ? ["bm", "admin"] : ["finance", "bm", "admin"];
-      const label = settings.creditApprover === "finance" ? "Finance" : settings.creditApprover === "bm" ? "Branch Manager" : "Finance / Branch Manager";
-      return [mk(label, roles, true)];
-    }
+      return [spv("Sales Supervisor"), admin("Admin", false)];
+    case "credit_override":
+      return [settings.creditApprover === "admin" ? admin("Admin") : spv("Sales Supervisor")];
     case "noo":
-      return [mk("Verifikasi data (Sales SPV)", ["spv", "bm", "admin"], true), mk("Limit kredit, TOP & price group (Finance)", ["finance", "admin"], false)];
+      return [spv("Verifikasi data (Sales Supervisor)"), admin("Limit kredit, TOP & price group (Admin)", false)];
     case "pipeline_stage":
-      return [mk("Sales SPV", ["spv", "bm", "admin"], true)];
+      return [spv("Sales Supervisor")];
   }
 }
 
@@ -86,7 +67,7 @@ export function checkOrder(o: Order, outlet: Outlet, settings: Settings): OrderC
         ? "Semua item sesuai price list aktif"
         : o.approvedTypes.includes("special_order")
           ? "Harga khusus sudah disetujui"
-          : `${priceDev.length} item di luar price list → perlu Approval Pesanan Khusus`,
+          : `${priceDev.length} item di luar price list → perlu Request Pesanan Khusus`,
     needs: priceDev.length && !o.approvedTypes.includes("special_order") ? "special_order" : undefined,
   });
   const badUom = o.items.filter((i) => listPrice(i.productId, i.uom) === undefined);
@@ -106,7 +87,7 @@ export function checkOrder(o: Order, outlet: Outlet, settings: Settings): OrderC
       o.discountPct === 0
         ? "Tanpa diskon"
         : discNeeds
-          ? `Diskon ${o.discountPct}% → perlu Approval Diskon (LOA)`
+          ? `Diskon ${o.discountPct}% → perlu Request Diskon (LOA)`
           : o.discountPct > salesMax
             ? `Diskon ${o.discountPct}% sudah disetujui`
             : `Diskon ${o.discountPct}%`,
@@ -123,9 +104,9 @@ export function checkOrder(o: Order, outlet: Outlet, settings: Settings): OrderC
     detail: o.approvedTypes.includes("credit_override")
       ? "Kelonggaran limit kredit sudah disetujui"
       : overdue
-        ? `Piutang jatuh tempo ${outlet.overdueDays} hari (> ${settings.overdueDays} hari) → perlu Approval Limit Kredit`
+        ? `Piutang jatuh tempo ${outlet.overdueDays} hari (> ${settings.overdueDays} hari) → perlu Request Limit Kredit`
         : over
-          ? "Saldo piutang + pesanan melebihi limit kredit → perlu Approval Limit Kredit"
+          ? "Saldo piutang + pesanan melebihi limit kredit → perlu Request Limit Kredit"
           : "Masih dalam limit kredit",
     needs: creditNeeds ? "credit_override" : undefined,
   });

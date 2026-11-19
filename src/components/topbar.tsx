@@ -1,4 +1,4 @@
-import { Check, ChevronDown, LogOut, Repeat } from "lucide-react";
+import { ArrowLeftToLine, Check, ChevronDown, Repeat } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,9 +14,10 @@ import { ROLE_ORDER } from "@/lib/rbac";
 import { initials } from "@/lib/format";
 
 export function Topbar() {
-  const { user, users, login, logout, scopeLabel, settings, toast, roleMeta } = useApp();
+  const { user, users, switchUser, scopeLabel, settings, toast, roleMeta } = useApp();
   if (!user) return null;
-  const demoUsers = ROLE_ORDER.map((r) => users.find((u) => u.role === r && ["U1", "U2", "U3", "U4", "U5", "U6"].includes(u.id))!).filter(Boolean);
+  /** Demo personas: Admin (Rina) and Sales Supervisor (Dewi). */
+  const demoUsers = ROLE_ORDER.map((r) => users.find((u) => u.role === r && ["U1", "U4"].includes(u.id))!).filter(Boolean);
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-6">
@@ -43,14 +44,14 @@ export function Topbar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-72">
             <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Repeat className="h-3.5 w-3.5" /> Ganti role demo
+              <Repeat className="h-3.5 w-3.5" /> Ganti role (demo)
             </DropdownMenuLabel>
             {demoUsers.map((u) => (
               <DropdownMenuItem
                 key={u.id}
                 onClick={() => {
-                  login(u.id);
-                  toast({ tone: "info", title: `Masuk sebagai ${roleMeta(u.role).label}`, desc: `${u.name} · ${roleMeta(u.role).scopeLabel}` });
+                  switchUser(u.id);
+                  toast({ tone: "info", title: `Sekarang sebagai ${roleMeta(u.role).label}`, desc: `${u.name} · ${roleMeta(u.role).scopeLabel}` });
                 }}
               >
                 <div className="flex flex-1 flex-col">
@@ -61,8 +62,8 @@ export function Topbar() {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
-              <LogOut /> Keluar
+            <DropdownMenuItem onClick={() => toast({ tone: "info", title: "Kembali ke MileApp", desc: "Di produksi kembali ke MileApp web (sesi dari MileApp). Mockup: tetap di halaman ini." })}>
+              <ArrowLeftToLine /> Kembali ke MileApp
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

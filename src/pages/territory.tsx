@@ -544,7 +544,7 @@ function TeamTab() {
             <TableHead className="w-12">No.</TableHead>
             <TableHead>Salesman</TableHead>
             <TableHead>Cabang</TableHead>
-            <TableHead>Sales SPV</TableHead>
+            <TableHead>Sales Supervisor</TableHead>
             <TableHead>Rute</TableHead>
             <TableHead className="w-12" />
           </TableRow>
@@ -590,7 +590,7 @@ function TeamTab() {
                   <b>{edit.s.name}</b> · {edit.s.code} · {branches.find((b) => b.id === edit.s.branchId)?.name}
                 </p>
                 <div className="space-y-1">
-                  <Label>Sales SPV</Label>
+                  <Label>Sales Supervisor</Label>
                   <Select value={edit.spvId} onValueChange={(v) => setEdit({ ...edit, spvId: v })}>
                     <SelectTrigger>
                       <SelectValue />

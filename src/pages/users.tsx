@@ -34,7 +34,7 @@ export function UsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Pengguna & Role"
-        subtitle="Login dan RBAC milik modul. Pengguna disinkronkan dari MileApp; permission mengikuti pola {aksi}_{resource} per halaman + custom permission (approve_*, import_*, export_*)."
+        subtitle="RBAC milik modul; pengguna masuk lewat MileApp (tanpa login modul) dan disinkronkan dari MileApp; permission mengikuti pola {aksi}_{resource} per halaman + custom permission (approve_*, import_*, export_*)."
       />
       <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-muted p-1">
         {tabs.map(([k, l]) => (
@@ -451,7 +451,7 @@ function RolesTab() {
 /* ---------------- Permission matrix ---------------- */
 function MatrixTab() {
   const { permissions, setPermissions, can, session, toast, roles, roleMeta, addAudit } = useApp();
-  const [role, setRole] = useState<string>(session?.role === "admin" ? "spv" : session!.role);
+  const [role, setRole] = useState<string>(session.role === "admin" ? "spv" : session.role);
   const meta = roleMeta(role);
   const editable = can("update_role") && role !== "admin";
   const perms = new Set(permissions[role] ?? []);
@@ -461,7 +461,7 @@ function MatrixTab() {
   const toggle = (perm: string, on: boolean) => {
     setPermissions((p) => ({ ...p, [role]: on ? [...(p[role] ?? []), perm] : (p[role] ?? []).filter((x) => x !== perm) }));
     addAudit({ module: "Role", action: "Permission diubah", target: meta.label, detail: `${on ? "+" : "-"} ${perm}` });
-    if (role === session?.role) toast({ tone: on ? "success" : "warning", title: `${perm} ${on ? "diberikan" : "dicabut"}`, desc: "Berlaku langsung untuk role Anda saat ini" });
+    if (role === session.role) toast({ tone: on ? "success" : "warning", title: `${perm} ${on ? "diberikan" : "dicabut"}`, desc: "Berlaku langsung untuk role Anda saat ini" });
   };
   const rowAll = (names: string[], on: boolean) => {
     setPermissions((p) => ({ ...p, [role]: on ? Array.from(new Set([...(p[role] ?? []), ...names])) : (p[role] ?? []).filter((x) => !names.includes(x)) }));
@@ -479,7 +479,7 @@ function MatrixTab() {
           >
             {r.key === "admin" && <Lock className="h-3.5 w-3.5" />}
             {r.label}
-            {r.key === session?.role && <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] text-white">Anda</span>}
+            {r.key === session.role && <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] text-white">Anda</span>}
           </button>
         ))}
         {editable && (
@@ -499,7 +499,7 @@ function MatrixTab() {
         )}
       </div>
       {role === "admin" && <p className="text-xs text-muted-foreground">Role Admin dikunci (super admin) agar tidak terjadi lock-out.</p>}
-      {role === session?.role && role !== "admin" && (
+      {role === session.role && role !== "admin" && (
         <p className="rounded-md border border-[#9FE1FE] bg-[#E6F7FF] p-2 text-xs text-[#01496A]">Ini role Anda saat ini: perubahan langsung terlihat di sidebar, tombol, dan halaman.</p>
       )}
 

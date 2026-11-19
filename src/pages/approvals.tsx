@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ApprovalBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
-import { APPROVAL_META, ROLE_META } from "@/lib/rbac";
+import { APPROVAL_META, REQUEST_PAGES, ROLE_META, type RequestPage } from "@/lib/rbac";
 import type { ApprovalRequest, ApprovalType } from "@/data/types";
 import { fmtDate, nowStamp, rupiah } from "@/lib/format";
 
@@ -49,30 +49,35 @@ function StepTimeline({ a }: { a: ApprovalRequest }) {
   );
 }
 
-export function ApprovalPage({ type }: { type: ApprovalType }) {
+/** D-52 Request pages: LOA (discount + special order + credit override, filter by type), New Customer (NOO), Pipeline. */
+export function ApprovalPage({ page }: { page: RequestPage }) {
   const { approvals, inScope, can, canActOnStep, decideApproval, settings, session, orders, opps } = useApp();
-  const meta = APPROVAL_META[type];
+  const def = REQUEST_PAGES[page];
+  const [typeFilter, setTypeFilter] = useState<ApprovalType | "all">("all");
+  const types = useMemo(() => (typeFilter === "all" ? def.types : [typeFilter]), [typeFilter, def]);
   const [tab, setTab] = useState<"pending" | "done" | "all">("pending");
   const [openId, setOpenId] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ id: string; approve: boolean; reason: string; limit?: number; top?: number; priceGroup?: string } | null>(null);
   const decA = decision ? approvals.find((a) => a.id === decision.id) : undefined;
-  /** NOO step 2 (Finance) must set credit limit, TOP and price group before approving (module 06 FR-010). */
+  /** NOO step 2 (Admin) must set credit limit, TOP and price group before approving (module 06 FR-010). */
   const needsCredit = !!decision?.approve && decA?.type === "noo" && decA.steps.findIndex((s) => s.status === "pending") === 1;
   const lateSla = (a: ApprovalRequest) => a.status === "pending" && hoursSince(a.createdAt) > settings.slaHours;
-  const hasApprove = can(meta.perm);
+  const perms = types.map((t) => APPROVAL_META[t].perm);
+  const hasApprove = perms.some(can);
+  const visible = useMemo(() => approvals.filter((a) => types.includes(a.type) && inScope(a.salesId)), [approvals, types, inScope]);
 
   const list = useMemo(
     () =>
-      approvals
-        .filter((a) => a.type === type && inScope(a.salesId))
+      visible
         .filter((a) => (tab === "pending" ? a.status === "pending" : tab === "done" ? a.status !== "pending" : true))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [approvals, type, inScope, tab]
+    [visible, tab]
   );
   const counts = {
-    pending: approvals.filter((a) => a.type === type && inScope(a.salesId) && a.status === "pending").length,
-    done: approvals.filter((a) => a.type === type && inScope(a.salesId) && a.status !== "pending").length,
+    pending: visible.filter((a) => a.status === "pending").length,
+    done: visible.filter((a) => a.status !== "pending").length,
   };
+  const pendingOf = (t: ApprovalType) => approvals.filter((a) => a.type === t && inScope(a.salesId) && a.status === "pending").length;
   const open = approvals.find((a) => a.id === openId) ?? null;
 
   const actionCell = (a: ApprovalRequest) => {
@@ -91,7 +96,7 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
     const step = a.steps.find((s) => s.status === "pending");
     return (
       <span className="text-xs text-muted-foreground">
-        {!hasApprove ? `Butuh ${meta.perm}` : `Menunggu ${step?.roles.filter((r) => r !== "admin").map((r) => ROLE_META[r].label).join(" / ")}`}
+        {!can(APPROVAL_META[a.type].perm) ? `Butuh ${APPROVAL_META[a.type].perm}` : `Menunggu ${ROLE_META[step?.roles.find((r) => r !== "admin") ?? "admin"].label}`}
       </span>
     );
   };
@@ -99,23 +104,38 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={meta.label}
-        subtitle={meta.desc}
+        title={def.title}
+        subtitle={def.desc}
         action={
           <Badge variant={hasApprove ? "success" : "neutral"} className="font-mono">
-            {hasApprove ? meta.perm : `view_any_${meta.resource} (lihat saja)`}
+            {hasApprove ? perms.filter(can).join(" · ") : "lihat saja"}
           </Badge>
         }
       />
 
-      {type === "discount" && (
+      {def.types.length > 1 && (
+        <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md border border-border bg-background p-1">
+          {(["all", ...def.types] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(t)}
+              className={cn("h-[30px] whitespace-nowrap rounded-sm px-3 text-sm font-medium", typeFilter === t ? "bg-accent text-primary" : "text-muted-foreground hover:bg-muted")}
+            >
+              {t === "all" ? "Semua" : APPROVAL_META[t].short}
+              {t !== "all" && pendingOf(t) > 0 && <span className="ml-1.5 text-xs text-muted-foreground">({pendingOf(t)})</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {types.includes("discount") && (
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-4 text-sm">
             <span className="mr-2 font-semibold">Tier LOA aktif:</span>
             {settings.loa.map((t, i) => {
               const prev = i === 0 ? 0 : settings.loa[i - 1].max ?? 0;
               return (
-                <Badge key={t.role} variant={session?.role === t.role ? "default" : "info"}>
+                <Badge key={t.role} variant={session.role === t.role ? "default" : "info"}>
                   {t.label}: {t.max === null ? `> ${prev}%` : i === 0 ? `≤ ${t.max}%` : `${prev}–${t.max}%`}
                 </Badge>
               );
@@ -129,7 +149,7 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
 
       {!hasApprove && (
         <div className="flex items-center gap-2 rounded-md border border-[#FFDA6B] bg-[#FFF4D1] p-3 text-sm text-[#6B5000]">
-          <ShieldAlert className="h-4 w-4" /> Role Anda hanya dapat melihat halaman ini. Tombol Setujui / Tolak hanya untuk pemegang permission <code className="font-mono">{meta.perm}</code>.
+          <ShieldAlert className="h-4 w-4" /> Role Anda hanya dapat melihat halaman ini. Tombol Setujui / Tolak hanya untuk pemegang permission <code className="font-mono">{perms.join(" / ")}</code>.
         </div>
       )}
 
@@ -170,6 +190,7 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
                     {a.title} {lateSla(a) && <Badge variant="danger" title={`Pending lebih dari ${settings.slaHours} jam; penyetuju menerima pengingat (tanpa auto-approve)`}>Lewat SLA</Badge>}
                   </p>
                   <p className="text-xs text-muted-foreground">
+                    {def.types.length > 1 && <span className="font-medium text-foreground">{APPROVAL_META[a.type].short} · </span>}
                     {a.no} · {a.outletName}
                   </p>
                 </TableCell>
@@ -204,14 +225,14 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
           {open && (
             <>
               <DialogHeader>
-                <DialogTitle>Detail Approval</DialogTitle>
+                <DialogTitle>Detail Request</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-lg font-bold">{open.title}</p>
                     <p className="text-sm text-muted-foreground">
-                      {open.no} · {meta.label}
+                      {open.no} · {APPROVAL_META[open.type].label}
                     </p>
                   </div>
                   <ApprovalBadge s={open.status} />
@@ -314,11 +335,11 @@ export function ApprovalPage({ type }: { type: ApprovalType }) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <p className="col-span-3 text-xs text-[#01496A]">Wajib diisi Finance sebelum menyetujui. Nilai ini dipakai saat pelanggan diaktifkan{settings.variant === "A" ? " dan dibuat di Odoo (res.partner)" : ""}.</p>
+                  <p className="col-span-3 text-xs text-[#01496A]">Wajib diisi Admin sebelum menyetujui. Nilai ini dipakai saat pelanggan diaktifkan{settings.variant === "A" ? " dan dibuat di Odoo (res.partner)" : ""}.</p>
                 </div>
               )}
               {!decision.approve && decA?.orderId && <p className="text-xs text-[#BF2130]">Menolak permintaan ini membuat pesanan terkait berstatus Ditolak.</p>}
-              <p className="text-xs text-muted-foreground">Keputusan dicatat dengan pengguna, permission ({meta.perm}), waktu dan alasan.</p>
+              <p className="text-xs text-muted-foreground">Keputusan dicatat dengan pengguna, permission ({decA ? APPROVAL_META[decA.type].perm : ""}), waktu dan alasan.</p>
             </div>
           )}
           <DialogFooter>

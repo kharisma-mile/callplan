@@ -220,12 +220,12 @@ function seedApprovals(orders: Order[], opps: Opportunity[], settings: Settings)
     if (firstApproved) {
       r.steps[0] = { ...r.steps[0], status: "approved", by: firstApproved, at: "2026-11-16 11:00", reason: "Margin masih aman" };
       r.steps[1] = { ...r.steps[1], status: "pending" };
-      r.audit.push({ at: "2026-11-16 11:00", by: firstApproved, role: "Branch Manager", action: "Disetujui (tahap 1)", permission: "approve_special_order", reason: "Margin masih aman" });
+      r.audit.push({ at: "2026-11-16 11:00", by: firstApproved, role: "Sales Supervisor", action: "Disetujui (tahap 1)", permission: "approve_special_order", reason: "Margin masih aman" });
     }
     list.push(r);
   };
   so(sby1[1].id, "Cetak logo custom thinwall 500 ml (proyek katering)", 86_000_000, "2026-11-17 07:55");
-  so(M.SALESMEN.find((s) => s.branchId === "BDG")!.id, "Kantong HD ukuran khusus 60x90 untuk pabrik", 142_000_000, "2026-11-15 14:00", "Bambang Prasetyo");
+  so(M.SALESMEN.find((s) => s.branchId === "BDG")!.id, "Kantong HD ukuran khusus 60x90 untuk pabrik", 142_000_000, "2026-11-15 14:00", M.SPVS.find((s) => s.branchId === "BDG")?.name ?? "Sales Supervisor");
 
   // credit override
   const cr = (salesId: string, at: string, idx = 0) => {
@@ -253,7 +253,7 @@ function seedApprovals(orders: Order[], opps: Opportunity[], settings: Settings)
   cr(sby2[1].id, "2026-11-17 09:30");
   cr(jkt[2].id, "2026-11-16 16:45", 1);
 
-  // NOO: registered from Mile Field at Prospek → prospect outlet (Pelanggan Baru) + NOO approval SPV → Finance
+  // NOO: registered from Mile Field at Prospek → prospect outlet (Pelanggan Baru) + NOO request Sales Supervisor → Admin
   const noo = (opp: Opportunity, at: string, spvDone?: string) => {
     const outlet = nooOutletFor(opp);
     opp.outletId = outlet.id;
@@ -275,7 +275,7 @@ function seedApprovals(orders: Order[], opps: Opportunity[], settings: Settings)
     if (spvDone) {
       r.steps[0] = { ...r.steps[0], status: "approved", by: spvDone, at: "2026-11-16 10:10", reason: "Data lengkap" };
       r.steps[1] = { ...r.steps[1], status: "pending" };
-      r.audit.push({ at: "2026-11-16 10:10", by: spvDone, role: "Sales SPV", action: "Disetujui (tahap 1)", permission: "approve_noo", reason: "Data lengkap" });
+      r.audit.push({ at: "2026-11-16 10:10", by: spvDone, role: "Sales Supervisor", action: "Disetujui (tahap 1)", permission: "approve_noo", reason: "Data lengkap" });
     }
     list.push(r);
   };
@@ -306,15 +306,19 @@ function monthsTargets(rows: TargetRow[]): TargetRow[] {
 }
 
 /* ---------------- context ---------------- */
+/** D-52: no module login; the user arrives signed in from MileApp (session hand-off). */
 interface Session {
   userId: string;
   role: string;
 }
 
+/** Default persona when opened from MileApp: Sales Supervisor Dewi Lestari (Cabang Surabaya · Tim Dewi). */
+const DEFAULT_USER_ID = "U4";
+
 const NO_ROLE: RoleDef = { key: "", label: "Tanpa role", scope: "team", scopeLabel: "Tidak ada akses", desc: "Belum ditetapkan Admin", builtin: false };
 
 export interface AppState {
-  session: Session | null;
+  session: Session;
   user: ModuleUser | null;
   permissions: Record<string, string[]>;
   roles: RoleDef[];
@@ -354,8 +358,8 @@ export interface ReassignInput {
 }
 
 interface Actions {
-  login: (userId: string) => void;
-  logout: () => void;
+  /** Demo only: switch persona (Admin / Sales Supervisor). */
+  switchUser: (userId: string) => void;
   can: (perm: string) => boolean;
   inScope: (salesId: string) => boolean;
   scopeSalesIds: string[];
@@ -416,12 +420,9 @@ function seed() {
 
 const BUILTIN_ROLES: RoleDef[] = ROLE_ORDER.map((k) => ROLE_META[k]);
 
-export function AppProvider({ children, initialUserId }: { children: ReactNode; initialUserId?: string }) {
+export function AppProvider({ children }: { children: ReactNode }) {
   const init = useRef(seed());
-  const [session, setSession] = useState<Session | null>(() => {
-    const u = initialUserId ? M.USERS.find((x) => x.id === initialUserId) : undefined;
-    return u && u.role ? { userId: u.id, role: u.role } : null;
-  });
+  const [session, setSession] = useState<Session>({ userId: DEFAULT_USER_ID, role: "spv" });
   const [permissions, setPermissions] = useState<Record<string, string[]>>(defaultPermissions);
   const [roles, setRoles] = useState<RoleDef[]>(BUILTIN_ROLES);
   const [settings, setSettings] = useState<Settings>(M.DEFAULT_SETTINGS);
@@ -449,19 +450,19 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
   const [routes, setRoutes] = useState<Route[]>(M.ROUTES);
   const [pjpRequests, setPjpRequests] = useState<PjpChangeRequest[]>(M.PJP_REQUESTS);
   const [targetLog, setTargetLog] = useState<TargetChange[]>([
-    { at: "2026-11-03 09:15", by: "Hendra Wijaya", level: "Cabang", key: "SBY", month: "2026-11", field: "nilai", from: 0, to: M.TARGETS_BRANCH.find((t) => t.key === "SBY")!.target, source: "import" },
+    { at: "2026-11-03 09:15", by: "Rina Kusuma", level: "Cabang", key: "SBY", month: "2026-11", field: "nilai", from: 0, to: M.TARGETS_BRANCH.find((t) => t.key === "SBY")!.target, source: "import" },
   ]);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([
     { at: "2026-11-17 06:00", by: "Sistem", module: "Pengguna", action: "Sinkron pengguna MileApp", target: "Semua", detail: "0 pengguna baru, 0 dinonaktifkan" },
-    { at: "2026-11-16 15:12", by: "Rina Kusuma", module: "Role", action: "Permission diubah", target: "Sales SPV", detail: "+ approve_pipeline_stage" },
-    { at: "2026-11-14 10:03", by: "Rina Kusuma", module: "Pengaturan", action: "Pengaturan disimpan", target: "Tier LOA diskon", detail: "Branch Manager 8% → 10%" },
+    { at: "2026-11-16 15:12", by: "Rina Kusuma", module: "Role", action: "Permission diubah", target: "Sales Supervisor", detail: "+ approve_pipeline_stage" },
+    { at: "2026-11-14 10:03", by: "Rina Kusuma", module: "Pengaturan", action: "Pengaturan disimpan", target: "Tier LOA diskon", detail: "Sales Supervisor 4% → 5%" },
   ]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [assortments, setAssortments] = useState<Assortment[]>(M.ASSORTMENTS);
   const [assortmentExceptions, setAssortmentExceptions] = useState<AssortmentException[]>(M.ASSORTMENT_EXCEPTIONS);
   const [ownershipLog, setOwnershipLog] = useState<OwnershipLog[]>(M.OWNERSHIP_LOG);
 
-  const user = session ? users.find((u) => u.id === session.userId) ?? null : null;
+  const user = users.find((u) => u.id === session.userId) ?? null;
 
   const roleMeta = useCallback((key: string | null | undefined) => (key ? roles.find((r) => r.key === key) ?? NO_ROLE : NO_ROLE), [roles]);
 
@@ -478,7 +479,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
   );
 
   const can = useCallback(
-    (perm: string) => (session ? (permissions[session.role] ?? []).includes(perm) : false),
+    (perm: string) => (permissions[session.role] ?? []).includes(perm),
     [session, permissions]
   );
 
@@ -503,7 +504,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
 
   const canActOnStep = useCallback(
     (a: ApprovalRequest) => {
-      if (!session || a.status !== "pending") return false;
+      if (a.status !== "pending") return false;
       if (!can(APPROVAL_META[a.type].perm)) return false;
       const step = a.steps.find((s) => s.status === "pending");
       return !!step && (step.roles as string[]).includes(session.role);
@@ -637,7 +638,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
             if (o.id !== a.orderId) return o;
             const approvedTypes = approved ? [...o.approvedTypes, a.type] : o.approvedTypes;
             const text = `${APPROVAL_META[a.type].short} ${approved ? "disetujui" : "ditolak"} oleh ${by}${reason ? ` (${reason})` : ""}`;
-            // Module 06 FR-013: any rejection (incl. discount) rejects the order; all approved → back to Sales Admin review
+            // Module 06 FR-013: any rejection (incl. discount) rejects the order; all approved → back to order review
             const status: OrderStatus = !approved || othersRejected ? "Ditolak" : othersPending ? "Menunggu Approval" : "Menunggu Review";
             const extra = !approved ? [{ at: stamp, by: "Sistem", text: `Pesanan ditolak karena ${APPROVAL_META[a.type].label} ditolak` }] : [];
             return { ...o, approvedTypes, status, log: [...o.log, { at: stamp, by, text }, ...extra] };
@@ -660,7 +661,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
           setOpps((list) =>
             list.map((o) =>
               o.id === a.oppId
-                ? { ...o, log: [...o.log, { at: stamp, by, text: approved ? "NOO disetujui Finance: pelanggan aktif, siap menerima pesanan pertama" : `NOO ditolak: ${reason}` }] }
+                ? { ...o, log: [...o.log, { at: stamp, by, text: approved ? "NOO disetujui: pelanggan aktif, siap menerima pesanan pertama" : `NOO ditolak: ${reason}` }] }
                 : o
             )
           );
@@ -697,7 +698,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
 
   const decideApproval = useCallback(
     (id: string, approve: boolean, reason: string, extra?: { nooCredit?: ApprovalRequest["nooCredit"] }) => {
-      if (!session || !user) return;
+      if (!user) return;
       const a = approvals.find((x) => x.id === id);
       if (!a) return;
       const stamp = nowStamp();
@@ -721,7 +722,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
       };
       const next: ApprovalRequest = { ...a, steps, status, audit: [...a.audit, entry], nooCredit: extra?.nooCredit ?? a.nooCredit };
       if (extra?.nooCredit)
-        next.details = [...a.details.filter((d) => d.label !== "Ditetapkan Finance"), { label: "Ditetapkan Finance", value: `${rupiah(extra.nooCredit.limit)} · TOP ${extra.nooCredit.top} hari · ${extra.nooCredit.priceGroup}` }];
+        next.details = [...a.details.filter((d) => d.label !== "Ditetapkan Admin"), { label: "Ditetapkan Admin", value: `${rupiah(extra.nooCredit.limit)} · TOP ${extra.nooCredit.top} hari · ${extra.nooCredit.priceGroup}` }];
       setApprovals((list) => list.map((x) => (x.id === id ? next : x)));
       if (status !== "pending") onFinal(next, status === "approved", reason, user.name);
       if (status === "approved" && a.type === "noo") {
@@ -736,7 +737,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
       } else {
         toast({
           tone: approve ? "success" : "danger",
-          title: approve ? (status === "approved" ? "Approval disetujui" : `Tahap ${idx + 1} disetujui, diteruskan ke ${steps[idx + 1]?.label}`) : "Permintaan ditolak",
+          title: approve ? (status === "approved" ? "Request disetujui" : `Tahap ${idx + 1} disetujui, diteruskan ke ${steps[idx + 1]?.label}`) : "Permintaan ditolak",
           desc: `${a.no} · ${a.title}${!approve && a.orderId ? " · pesanan ikut ditolak" : ""}`,
         });
       }
@@ -767,7 +768,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
           toStage: stage,
           details: [{ label: "Jenis peluang", value: opp.type }, ...(batalReason ? [{ label: "Alasan batal", value: batalReason }] : [])],
         });
-        toast({ tone: "info", title: "Menunggu approval tahap", desc: `Perpindahan ke "${stage}" dikirim ke halaman Approval Tahap Pipeline (SPV).` });
+        toast({ tone: "info", title: "Menunggu approval tahap", desc: `Perpindahan ke "${stage}" dikirim ke Request › Pipeline (Sales Supervisor).` });
         return;
       }
       setOpps((list) =>
@@ -787,7 +788,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
     [opps, user, settings.pipelineStageApproval, settings.pipelineBatalApproval, createApproval, toast]
   );
 
-  /** Module 05 FR-005 / 16: an NOO opportunity is registered at Prospek → prospect outlet + NOO approval (SPV → Finance). */
+  /** Module 05 FR-005 / 16: an NOO opportunity is registered at Prospek → prospect outlet + NOO request (Sales Supervisor → Admin). */
   const createOpp = useCallback(
     (opp: Opportunity) => {
       if (opp.type !== "Pelanggan Baru (NOO)") {
@@ -798,7 +799,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
       const fresh: Outlet[] = [];
       const outlet = nooOutletFor(opp, fresh);
       setOutlets((l) => [outlet, ...l]);
-      setOpps((l) => [{ ...opp, outletId: outlet.id, log: [...opp.log, { at: nowStamp(), by: "Sistem", text: "NOO dibuat di tahap Prospek → approval SPV (data) lalu Finance (kredit)" }] }, ...l]);
+      setOpps((l) => [{ ...opp, outletId: outlet.id, log: [...opp.log, { at: nowStamp(), by: "Sistem", text: "NOO dibuat di tahap Prospek → request ke Sales Supervisor (data) lalu Admin (kredit)" }] }, ...l]);
       createApproval("noo", {
         title: `Pelanggan baru: ${opp.name}`,
         salesId: opp.salesId,
@@ -808,7 +809,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
         outletId: outlet.id,
         details: nooDetails(opp),
       });
-      toast({ tone: "success", title: "Peluang + NOO dibuat", desc: `${opp.name} · outlet prospek ${outlet.code} (Pelanggan Baru) · Approval NOO: SPV → Finance` });
+      toast({ tone: "success", title: "Peluang + NOO dibuat", desc: `${opp.name} · outlet prospek ${outlet.code} (Pelanggan Baru) · Request NOO: Sales Supervisor → Admin` });
     },
     [createApproval, toast]
   );
@@ -901,11 +902,10 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
     setAssortmentExceptions,
     reassignOutlets,
     assortmentFor,
-    login: (userId) => {
+    switchUser: (userId) => {
       const u = users.find((x) => x.id === userId);
       if (u && u.role) setSession({ userId, role: u.role });
     },
-    logout: () => setSession(null),
     can,
     inScope,
     scopeSalesIds,

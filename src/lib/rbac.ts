@@ -13,40 +13,40 @@ export interface ResourceDef {
 }
 
 export const RESOURCES: ResourceDef[] = [
-  { key: "dashboard", label: "Dashboard", group: "Umum", crud: ["view_any"], custom: [] },
-  { key: "pjp", label: "PJP / Call Plan", group: "Operasional", crud: [...CRUD], custom: ["approve_pjp", "publish_pjp"] },
-  { key: "outlet", label: "Outlet / Pelanggan", group: "Operasional", crud: [...CRUD], custom: ["import_outlet", "export_outlet", "update_credit_limit"] },
-  { key: "outlet_assignment", label: "Plotting Pelanggan", group: "Operasional", crud: ["view_any"], custom: ["reassign_outlet", "import_outlet_assignment"] },
-  { key: "opportunity", label: "Pipeline", group: "Operasional", crud: [...CRUD], custom: [] },
-  { key: "order", label: "Review Pesanan", group: "Operasional", crud: ["view_any", "view", "update"], custom: ["confirm_order"] },
-  { key: "target", label: "Target", group: "Operasional", crud: [...CRUD], custom: [] },
-  { key: "discount", label: "Approval Diskon", group: "Approval", crud: ["view_any", "view"], custom: ["approve_discount"] },
-  { key: "special_order", label: "Approval Pesanan Khusus", group: "Approval", crud: ["view_any", "view"], custom: ["approve_special_order"] },
-  { key: "credit_override", label: "Approval Limit Kredit", group: "Approval", crud: ["view_any", "view"], custom: ["approve_credit_override"] },
-  { key: "noo", label: "Approval Pelanggan Baru", group: "Approval", crud: ["view_any", "view"], custom: ["approve_noo"] },
-  { key: "pipeline_stage", label: "Approval Tahap Pipeline", group: "Approval", crud: ["view_any", "view"], custom: ["approve_pipeline_stage"] },
-  { key: "product", label: "Produk", group: "Master Data", crud: [...CRUD], custom: [] },
-  { key: "price_list", label: "Price List", group: "Master Data", crud: [...CRUD], custom: [] },
-  { key: "assortment", label: "Assortment Produk", group: "Master Data", crud: [...CRUD], custom: [] },
-  { key: "branch", label: "Cabang", group: "Master Data", crud: ["view_any", "view", "update"], custom: [] },
-  { key: "region", label: "Region", group: "Master Data", crud: [...CRUD], custom: [] },
-  { key: "route", label: "Rute / Territory", group: "Master Data", crud: [...CRUD], custom: [] },
-  { key: "sales_team", label: "Tim Sales", group: "Master Data", crud: ["view_any", "view", "update"], custom: [] },
-  { key: "visit_report", label: "Laporan Kunjungan", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "call_compliance_report", label: "Laporan Call Compliance", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "order_report", label: "Laporan Pesanan", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "approval_log", label: "Log Approval", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "noo_report", label: "Laporan NOO", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "pipeline_report", label: "Laporan Pipeline", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "survey_report", label: "Laporan Survey Kompetitor", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "target_achievement_report", label: "Laporan Pencapaian Target", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "outlet_report", label: "Laporan Outlet", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "must_sell_report", label: "Laporan Kepatuhan Must-sell", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "adoption", label: "Adopsi Aplikasi", group: "Laporan", crud: ["view_any"], custom: [] },
-  { key: "data", label: "Data (Sinkronisasi / Import-Export)", group: "Administrasi", crud: ["view_any"], custom: ["sync_data", "import_data", "export_data"] },
-  { key: "user", label: "Pengguna", group: "Administrasi", crud: [...CRUD], custom: [] },
-  { key: "role", label: "Role & Permission", group: "Administrasi", crud: [...CRUD], custom: [] },
-  { key: "setting", label: "Pengaturan", group: "Administrasi", crud: ["view_any", "update"], custom: [] },
+  { key: "dashboard", label: "Dashboard", group: "Dashboard", crud: ["view_any"], custom: [] },
+  { key: "outlet", label: "Outlet / Pelanggan", group: "Master", crud: [...CRUD], custom: ["import_outlet", "export_outlet", "update_credit_limit"] },
+  { key: "pjp", label: "PJP / Call Plan", group: "Sales Operation", crud: [...CRUD], custom: ["approve_pjp", "publish_pjp"] },
+  { key: "outlet_assignment", label: "Plotting Pelanggan", group: "Sales Operation", crud: ["view_any"], custom: ["reassign_outlet", "import_outlet_assignment"] },
+  { key: "opportunity", label: "Pipeline", group: "Sales Operation", crud: [...CRUD], custom: [] },
+  { key: "order", label: "Review Pesanan", group: "Sales Operation", crud: ["view_any", "view", "update"], custom: ["confirm_order"] },
+  { key: "target", label: "Target", group: "Sales Operation", crud: [...CRUD], custom: [] },
+  { key: "discount", label: "Request Diskon (LOA)", group: "Request", crud: ["view_any", "view"], custom: ["approve_discount"] },
+  { key: "special_order", label: "Request Pesanan Khusus (LOA)", group: "Request", crud: ["view_any", "view"], custom: ["approve_special_order"] },
+  { key: "credit_override", label: "Request Limit Kredit (LOA)", group: "Request", crud: ["view_any", "view"], custom: ["approve_credit_override"] },
+  { key: "noo", label: "Request New Customer (NOO)", group: "Request", crud: ["view_any", "view"], custom: ["approve_noo"] },
+  { key: "pipeline_stage", label: "Request Pipeline", group: "Request", crud: ["view_any", "view"], custom: ["approve_pipeline_stage"] },
+  { key: "product", label: "Produk", group: "Master", crud: [...CRUD], custom: [] },
+  { key: "price_list", label: "Price List", group: "Master", crud: [...CRUD], custom: [] },
+  { key: "assortment", label: "Assortment Produk", group: "Master", crud: [...CRUD], custom: [] },
+  { key: "branch", label: "Cabang", group: "Master", crud: ["view_any", "view", "update"], custom: [] },
+  { key: "region", label: "Region", group: "Master", crud: [...CRUD], custom: [] },
+  { key: "route", label: "Rute / Territory", group: "Master", crud: [...CRUD], custom: [] },
+  { key: "sales_team", label: "Tim Sales", group: "Master", crud: ["view_any", "view", "update"], custom: [] },
+  { key: "visit_report", label: "Laporan Kunjungan", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "call_compliance_report", label: "Laporan Call Compliance", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "order_report", label: "Laporan Pesanan", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "approval_log", label: "Log Approval", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "noo_report", label: "Laporan NOO", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "pipeline_report", label: "Laporan Pipeline", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "survey_report", label: "Laporan Survey Kompetitor", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "target_achievement_report", label: "Laporan Pencapaian Target", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "outlet_report", label: "Laporan Outlet", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "must_sell_report", label: "Laporan Kepatuhan Must-sell", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "adoption", label: "Adopsi Aplikasi", group: "Report", crud: ["view_any"], custom: [] },
+  { key: "data", label: "Data (Sinkronisasi / Import-Export)", group: "Master (Admin)", crud: ["view_any"], custom: ["sync_data", "import_data", "export_data"] },
+  { key: "user", label: "Pengguna", group: "Master (Admin)", crud: [...CRUD], custom: [] },
+  { key: "role", label: "Role & Permission", group: "Master (Admin)", crud: [...CRUD], custom: [] },
+  { key: "setting", label: "Pengaturan", group: "Master (Admin)", crud: ["view_any", "update"], custom: [] },
 ];
 
 export function allPermissions(): string[] {
@@ -54,120 +54,58 @@ export function allPermissions(): string[] {
 }
 
 export const ROLE_META: Record<RoleKey, RoleDef> = {
-  admin: { key: "admin", builtin: true, label: "Admin", scope: "all", scopeLabel: "Semua cabang", desc: "Kelola pengguna, role, permission, data dan pengaturan modul" },
-  cd: { key: "cd", builtin: true, label: "Commercial Director", scope: "all", scopeLabel: "Semua cabang + HQ", desc: "Dashboard nasional, approval diskon & pesanan khusus tertinggi" },
-  bm: { key: "bm", builtin: true, label: "Branch Manager", scope: "branch", scopeLabel: "Cabang sendiri", desc: "Dashboard cabang, approval diskon s.d. 10%, target cabang" },
-  spv: { key: "spv", builtin: true, label: "Sales SPV", scope: "team", scopeLabel: "Tim sendiri", desc: "Atur PJP tim, pipeline, approval diskon s.d. 5%, NOO dan Batal pipeline" },
-  sales_admin: { key: "sales_admin", builtin: true, label: "Sales Admin", scope: "branch", scopeLabel: "Cabang sendiri", desc: "Review pesanan dari lapangan, import / export data" },
-  finance: { key: "finance", builtin: true, label: "Finance & Accounting", scope: "all", scopeLabel: "Semua cabang", desc: "Approval limit kredit, data kredit NOO, ubah limit kredit (Varian B)" },
+  admin: { key: "admin", builtin: true, label: "Admin", scope: "all", scopeLabel: "Semua cabang", desc: "Semua data dan pengaturan; memutuskan request di atas tier Sales Supervisor" },
+  spv: { key: "spv", builtin: true, label: "Sales Supervisor", scope: "team", scopeLabel: "Tim sendiri", desc: "PJP tim, plotting dalam tim, pipeline, review pesanan, request sesuai tier LOA" },
 };
 
 export const SCOPE_LABEL = { all: "Semua cabang", branch: "Cabang sendiri", team: "Tim sendiri" } as const;
 
-export const ROLE_ORDER: RoleKey[] = ["admin", "cd", "bm", "spv", "sales_admin", "finance"];
+export const ROLE_ORDER: RoleKey[] = ["admin", "spv"];
 
 const p = (res: string, actions: string[]) => actions.map((a) => `${a}_${res}`);
 const VIEW = ["view_any", "view"];
 
-const REPORTS_ALL = [
-  "visit_report",
-  "call_compliance_report",
-  "order_report",
-  "approval_log",
-  "noo_report",
-  "pipeline_report",
-  "survey_report",
-  "target_achievement_report",
-  "outlet_report",
-  "adoption",
-  "must_sell_report",
-].map((r) => `view_any_${r}`);
-const MASTER_VIEW = [...p("product", VIEW), ...p("price_list", VIEW)];
-
+/** D-52: Admin = everything; Sales Supervisor = own team (Master read-only, no Data / Pengguna / Pengaturan). */
 export function defaultPermissions(): Record<string, string[]> {
   return {
     admin: allPermissions(),
-    cd: [
-      "view_any_dashboard",
-      ...p("pjp", VIEW), "approve_pjp",
-      ...p("outlet", VIEW), "export_outlet",
-      "view_any_outlet_assignment",
-      ...p("opportunity", VIEW),
-      ...p("order", VIEW),
-      ...p("target", [...CRUD]),
-      ...p("discount", VIEW), "approve_discount",
-      ...p("special_order", VIEW), "approve_special_order",
-      ...p("credit_override", VIEW), "approve_credit_override",
-      ...p("noo", VIEW),
-      ...p("pipeline_stage", VIEW), "approve_pipeline_stage",
-      ...MASTER_VIEW, ...p("assortment", ["view_any", "view", "create", "update"]),
-      ...p("branch", VIEW), ...p("region", VIEW), ...p("route", VIEW), ...p("sales_team", VIEW),
-      ...REPORTS_ALL,
-      "view_any_data", "export_data",
-      "view_any_setting",
-    ],
-    bm: [
-      "view_any_dashboard",
-      ...p("pjp", ["view_any", "view", "update"]), "approve_pjp", "publish_pjp",
-      ...p("outlet", ["view_any", "view", "create", "update"]), "export_outlet",
-      "view_any_outlet_assignment", "reassign_outlet",
-      ...p("opportunity", [...CRUD]),
-      ...p("order", VIEW),
-      ...p("target", ["view_any", "view", "create", "update"]),
-      ...p("discount", VIEW), "approve_discount",
-      ...p("special_order", VIEW), "approve_special_order",
-      ...p("credit_override", VIEW), "approve_credit_override",
-      ...p("noo", VIEW),
-      ...p("pipeline_stage", VIEW), "approve_pipeline_stage",
-      ...MASTER_VIEW, ...p("assortment", VIEW),
-      ...p("branch", VIEW), ...p("route", ["view_any", "view", "create", "update"]), ...p("sales_team", ["view_any", "view", "update"]),
-      ...REPORTS_ALL,
-      "export_data",
-    ],
     spv: [
       "view_any_dashboard",
       ...p("pjp", [...CRUD]), "approve_pjp", "publish_pjp",
-      ...p("outlet", ["view_any", "view", "create", "update"]),
+      ...p("outlet", ["view_any", "view", "create", "update"]), "export_outlet",
       "view_any_outlet_assignment", "reassign_outlet",
       ...p("opportunity", [...CRUD]),
-      ...p("order", VIEW),
+      ...p("order", ["view_any", "view", "update"]), "confirm_order",
       ...p("target", VIEW),
       ...p("discount", VIEW), "approve_discount",
-      ...p("noo", VIEW), "approve_noo",
-      ...p("pipeline_stage", VIEW), "approve_pipeline_stage",
-      ...MASTER_VIEW, ...p("assortment", VIEW),
-      ...p("route", ["view_any", "view", "create", "update"]), ...p("sales_team", VIEW),
-      ...["visit_report", "call_compliance_report", "order_report", "pipeline_report", "survey_report", "noo_report", "target_achievement_report", "must_sell_report"].map((r) => `view_any_${r}`),
-    ],
-    sales_admin: [
-      "view_any_dashboard",
-      ...p("pjp", VIEW),
-      ...p("outlet", ["view_any", "view", "update"]), "import_outlet", "export_outlet",
-      "view_any_outlet_assignment", "import_outlet_assignment",
-      ...p("order", ["view_any", "view", "update"]), "confirm_order",
-      ...MASTER_VIEW, ...p("assortment", VIEW),
-      ...p("branch", ["view_any"]), ...p("route", ["view_any"]),
-      "view_any_order_report", "view_any_outlet_report", "view_any_adoption",
-      "view_any_data", "sync_data", "import_data", "export_data",
-    ],
-    finance: [
-      "view_any_dashboard",
-      ...p("outlet", ["view_any", "view", "update"]), "export_outlet", "update_credit_limit",
-      ...p("order", VIEW),
+      ...p("special_order", VIEW), "approve_special_order",
       ...p("credit_override", VIEW), "approve_credit_override",
       ...p("noo", VIEW), "approve_noo",
-      ...MASTER_VIEW,
-      ...p("branch", ["view_any"]), ...p("route", ["view_any"]),
-      "view_any_order_report", "view_any_approval_log",
-      "view_any_data", "import_data", "export_data",
+      ...p("pipeline_stage", VIEW), "approve_pipeline_stage",
+      ...p("product", VIEW), ...p("price_list", VIEW), ...p("assortment", VIEW),
+      ...p("route", ["view_any", "view", "create", "update"]), ...p("sales_team", VIEW),
+      ...["visit_report", "call_compliance_report", "order_report", "approval_log", "pipeline_report", "survey_report", "noo_report", "target_achievement_report", "must_sell_report"].map((r) => `view_any_${r}`),
     ],
   };
 }
 
 export const APPROVAL_META: Record<ApprovalType, { label: string; short: string; resource: string; perm: string; desc: string }> = {
-  discount: { label: "Approval Diskon", short: "Diskon", resource: "discount", perm: "approve_discount", desc: "Diskon di atas kewenangan Sales, berjenjang sesuai LOA (Level of Authority)." },
-  special_order: { label: "Approval Pesanan Khusus", short: "Pesanan Khusus", resource: "special_order", perm: "approve_special_order", desc: "Harga di luar price list, produk non-katalog / proyek, atau TOP khusus. Disetujui BM lalu CD." },
-  credit_override: { label: "Approval Kelonggaran Limit Kredit", short: "Limit Kredit", resource: "credit_override", perm: "approve_credit_override", desc: "Pesanan yang melebihi limit kredit pelanggan. Disetujui Finance atau BM." },
-  noo: { label: "Approval Pelanggan Baru (NOO)", short: "Pelanggan Baru", resource: "noo", perm: "approve_noo", desc: "Registrasi pelanggan baru dari lapangan. SPV memeriksa data, Finance menetapkan limit kredit / TOP." },
-  pipeline_stage: { label: "Approval Tahap Pipeline", short: "Tahap Pipeline", resource: "pipeline_stage", perm: "approve_pipeline_stage", desc: "Perpindahan tahap pipeline (Batal secara default; semua tahap jika diaktifkan di Pengaturan)." },
+  discount: { label: "Request Diskon", short: "Diskon", resource: "discount", perm: "approve_discount", desc: "Diskon di atas kewenangan Sales, sesuai tier LOA (Level of Authority)." },
+  special_order: { label: "Request Pesanan Khusus", short: "Pesanan Khusus", resource: "special_order", perm: "approve_special_order", desc: "Harga di luar price list, produk non-katalog / proyek, atau TOP khusus." },
+  credit_override: { label: "Request Limit Kredit", short: "Limit Kredit", resource: "credit_override", perm: "approve_credit_override", desc: "Pesanan yang melebihi limit kredit atau piutang jatuh tempo pelanggan." },
+  noo: { label: "Request New Customer (NOO)", short: "New Customer", resource: "noo", perm: "approve_noo", desc: "Registrasi pelanggan baru dari lapangan. Sales Supervisor memeriksa data, Admin menetapkan limit kredit / TOP / price group." },
+  pipeline_stage: { label: "Request Pipeline", short: "Pipeline", resource: "pipeline_stage", perm: "approve_pipeline_stage", desc: "Perpindahan tahap pipeline (Batal secara default; semua tahap jika diaktifkan di Pengaturan)." },
 };
+
+/** D-52 Request menu: LOA merges discount, special order and credit override in one page. */
+export type RequestPage = "loa" | "noo" | "pipeline";
+export const REQUEST_PAGES: Record<RequestPage, { title: string; desc: string; types: ApprovalType[] }> = {
+  loa: {
+    title: "Request LOA",
+    desc: "Diskon, pesanan khusus dan kelonggaran limit kredit sesuai Level of Authority. Sales Supervisor memutuskan dalam tiernya; di atasnya Admin.",
+    types: ["discount", "special_order", "credit_override"],
+  },
+  noo: { title: "Request New Customer (NOO)", desc: APPROVAL_META.noo.desc, types: ["noo"] },
+  pipeline: { title: "Request Pipeline", desc: APPROVAL_META.pipeline_stage.desc, types: ["pipeline_stage"] },
+};
+export const requestPageOf = (t: ApprovalType): RequestPage => (t === "noo" ? "noo" : t === "pipeline_stage" ? "pipeline" : "loa");

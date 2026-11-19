@@ -62,7 +62,7 @@ export function PipelinePage() {
     if (!a) return o.outletId && outlets.find((x) => x.id === o.outletId)?.status !== "baru" ? "NOO disetujui" : null;
     if (a.status === "approved") return "NOO disetujui";
     if (a.status === "rejected") return "NOO ditolak";
-    return `NOO: menunggu ${a.steps.find((s) => s.status === "pending")?.label.includes("Finance") ? "Finance" : "SPV"}`;
+    return `NOO: menunggu ${a.steps.find((s) => s.status === "pending")?.label.includes("Admin") ? "Admin" : "Sales Supervisor"}`;
   };
   const [view, setView] = useState<"kanban" | "list">("kanban");
   const [salesFilter, setSalesFilter] = useState("all");
@@ -151,9 +151,9 @@ export function PipelinePage() {
             {settings.pipelineStageApproval ? (
               <b className="text-[#BA4917]">Approval SPV per tahap aktif (setiap perpindahan).</b>
             ) : settings.pipelineBatalApproval ? (
-              "NOO dibuat di tahap Prospek (approval SPV → Finance); Menang = pesanan pertama disetujui; Batal perlu approval SPV."
+              "NOO dibuat di tahap Prospek (request Sales Supervisor → Admin); Menang = pesanan pertama disetujui; Batal perlu approval SPV."
             ) : (
-              "NOO dibuat di tahap Prospek (approval SPV → Finance); Menang = pesanan pertama disetujui; perpindahan tahap lain bebas."
+              "NOO dibuat di tahap Prospek (request Sales Supervisor → Admin); Menang = pesanan pertama disetujui; perpindahan tahap lain bebas."
             )}
           </>
         }
@@ -357,7 +357,7 @@ export function PipelinePage() {
                 )}
                 {detail.pendingStage && (
                   <p className="rounded-md bg-[#FCEEE8] p-2 text-xs text-[#8D3711]">
-                    Menunggu approval SPV untuk pindah ke <b>{detail.pendingStage}</b> (halaman Approval Tahap Pipeline).
+                    Menunggu approval SPV untuk pindah ke <b>{detail.pendingStage}</b> (halaman Request › Pipeline).
                   </p>
                 )}
                 <div className="grid grid-cols-2 gap-4">
@@ -518,7 +518,7 @@ export function PipelinePage() {
             <div className="grid grid-cols-2 gap-4 p-4">
               {create.type === "Pelanggan Baru (NOO)" && (
                 <p className="col-span-2 rounded-md border border-[#9FE1FE] bg-[#E6F7FF] p-2 text-xs text-[#01496A]">
-                  Jenis Pelanggan Baru: NOO dibuat di tahap Prospek (outlet prospek berstatus Pelanggan Baru + Approval NOO SPV → Finance). Jalur utama tetap registrasi NOO dari Mile Field.
+                  Jenis Pelanggan Baru: NOO dibuat di tahap Prospek (outlet prospek berstatus Pelanggan Baru + Request NOO Sales Supervisor → Admin). Jalur utama tetap registrasi NOO dari Mile Field.
                 </p>
               )}
               {!settings.existingCustomerPipeline && (

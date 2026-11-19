@@ -54,14 +54,13 @@ const LABELS: Partial<Record<keyof Settings, string>> = {
   carryOverMaxDays: "Carry-over maks hari",
   publishCutoff: "Batas publish (H-1)",
   lockAfterPublish: "Kunci PJP setelah publish",
-  changeApprover: "Penyetuju perubahan PJP",
   changeRequestSlaHours: "SLA permintaan perubahan",
   generateKeepRoute: "Generate: pertahankan rute",
   routeStartPoint: "Titik awal rute",
   reminderTime: "Jam pengingat call plan",
-  salesAdminReview: "Review Sales Admin",
+  orderReview: "Review pesanan sebelum hand-off",
   orderWithoutVisitHQ: "Pesanan tanpa kunjungan (HQ Direct Sales)",
-  nooOrderBeforeFinance: "Pesanan pertama NOO sebelum approval Finance",
+  nooOrderBeforeApproval: "Pesanan pertama NOO sebelum request disetujui",
   minOrder: "Minimum order per customer group",
   geofenceM: "Radius geofence (m)",
 };
@@ -228,7 +227,6 @@ export function SettingsPage() {
     });
   };
   const history = auditLog.filter((e) => e.module === "Pengaturan").slice(0, 10);
-  const creditLabel = settings.creditApprover === "finance" ? "Finance" : settings.creditApprover === "bm" ? "Branch Manager" : "Finance atau Branch Manager (salah satu cukup)";
 
   return (
     <div className="space-y-6">
@@ -244,7 +242,7 @@ export function SettingsPage() {
         <CardContent className="grid gap-4 pt-0 md:grid-cols-2">
           {(
             [
-              ["A", "Varian A · Integrasi Odoo", "Master data, harga, piutang dari Odoo (sinkron). Pesanan yang dikonfirmasi Sales Admin dibuat sebagai Sales Order draft di Odoo.", Database],
+              ["A", "Varian A · Integrasi Odoo", "Master data, harga, piutang dari Odoo (sinkron). Pesanan yang dikonfirmasi di Review Pesanan dibuat sebagai Sales Order draft di Odoo.", Database],
               ["B", "Varian B · Standalone", "Odoo hanya untuk import awal. Data master, pesanan, approval, piutang dan limit kredit dikelola di modul dengan import / export Excel massal.", FileSpreadsheet],
             ] as const
           ).map(([v, title, desc, Icon]) => (
@@ -295,7 +293,7 @@ export function SettingsPage() {
         >
           {(d, set, ed) => (
             <>
-              <Row title="Approval Batal pipeline oleh SPV" hint="Default aktif (AS-15). Peluang tetap di tahapnya sampai SPV memutuskan di Approval Tahap Pipeline.">
+              <Row title="Approval Batal pipeline oleh SPV" hint="Default aktif (AS-15). Peluang tetap di tahapnya sampai Sales Supervisor memutuskan di Request Pipeline.">
                 <Switch checked={d.pipelineBatalApproval} disabled={!ed} onChange={(v) => set({ pipelineBatalApproval: v })} />
               </Row>
               <Row title="Approval SPV per perpindahan tahap pipeline" hint="Default mati. Jika aktif, setiap perpindahan tahap menunggu approval SPV.">
@@ -304,7 +302,7 @@ export function SettingsPage() {
               <Row title="Pipeline untuk pelanggan lama (produk baru / proyek)" hint="Opsi hibrida, default mati (AS-14). Default pipeline hanya untuk Pelanggan Baru (NOO).">
                 <Switch checked={d.existingCustomerPipeline} disabled={!ed} onChange={(v) => set({ existingCustomerPipeline: v })} />
               </Row>
-              <Row title="Batas piutang jatuh tempo (hari)" hint="Lewat batas ini pesanan wajib Approval Limit Kredit (contoh 30 hari, ditetapkan Finance).">
+              <Row title="Batas piutang jatuh tempo (hari)" hint="Lewat batas ini pesanan wajib Request Limit Kredit (contoh 30 hari, ditetapkan UP).">
                 <Input type="number" className="w-24 text-right" disabled={!ed} value={d.overdueDays} onChange={(e) => set({ overdueDays: Number(e.target.value) })} />
               </Row>
             </>
@@ -318,17 +316,17 @@ export function SettingsPage() {
         >
           {(d, set, ed) => (
             <>
-              <Row title="Pemicu approval" hint="Otomatis (default PRD): request dibuat saat pesanan masuk, sebelum review Sales Admin. Manual: Sales Admin menekan Ajukan approval.">
-                <Pick value={d.approvalTrigger} disabled={!ed} onChange={(v) => set({ approvalTrigger: v })} options={[["auto", "Otomatis saat pesanan masuk"], ["manual", "Oleh Sales Admin"]]} />
+              <Row title="Pemicu approval" hint="Otomatis (default PRD): request dibuat saat pesanan masuk, sebelum review pesanan. Manual: peninjau pesanan menekan Ajukan approval.">
+                <Pick value={d.approvalTrigger} disabled={!ed} onChange={(v) => set({ approvalTrigger: v })} options={[["auto", "Otomatis saat pesanan masuk"], ["manual", "Manual dari Review Pesanan"]]} />
               </Row>
-              <Row title="Mode tier diskon" hint="Default: langsung ke satu tier yang mencakup besar diskon (atasan boleh memutuskan).">
+              <Row title="Mode tier diskon" hint="Default: langsung ke satu tier yang mencakup besar diskon (Admin selalu boleh memutuskan). Berurutan: di atas tier Supervisor, Sales Supervisor dulu lalu Admin.">
                 <Pick value={d.discountTierMode} disabled={!ed} onChange={(v) => set({ discountTierMode: v })} options={[["single", "Satu tier yang mencakup"], ["sequential", "Berurutan setiap tier"]]} />
               </Row>
               <Row title="Ukuran diskon" hint="Dasar perbandingan dengan tier LOA.">
                 <Pick value={d.discountBasis} disabled={!ed} onChange={(v) => set({ discountBasis: v })} options={[["order", "Rata-rata tertimbang pesanan"], ["line", "Maksimum per baris"]]} />
               </Row>
-              <Row title="Penyetuju limit kredit" hint="AS-21: Finance atau Branch Manager.">
-                <Pick value={d.creditApprover} disabled={!ed} onChange={(v) => set({ creditApprover: v })} options={[["finance_or_bm", "Finance atau BM"], ["finance", "Finance saja"], ["bm", "Branch Manager saja"]]} />
+              <Row title="Penyetuju limit kredit" hint="Default Sales Supervisor tim (Admin selalu dapat memutuskan).">
+                <Pick value={d.creditApprover} disabled={!ed} onChange={(v) => set({ creditApprover: v })} options={[["spv", "Sales Supervisor"], ["admin", "Admin saja"]]} />
               </Row>
               <Row title="SLA pengingat approval (jam)" hint="Request pending melewati SLA ditandai 'Lewat SLA' dan penyetuju diingatkan. Tanpa auto-approve.">
                 <Input type="number" className="w-24 text-right" disabled={!ed} value={d.slaHours} onChange={(e) => set({ slaHours: Number(e.target.value) })} />
@@ -387,7 +385,7 @@ export function SettingsPage() {
                   })}
                 </TableBody>
               </Table>
-              <p className="text-xs text-muted-foreground">Contoh tier (Sales 2%, SPV 5%, BM 10%, CD di atasnya) — angka final ditetapkan UP. Perubahan berlaku untuk permintaan diskon baru.</p>
+              <p className="text-xs text-muted-foreground">Contoh tier (Sales 2%, Sales Supervisor 5%, Admin di atasnya) — angka final ditetapkan UP. Perubahan berlaku untuk permintaan diskon baru.</p>
             </>
           )}
         </SettingsCard>
@@ -409,11 +407,11 @@ export function SettingsPage() {
               </TableHeader>
               <TableBody>
                 {[
-                  ["Diskon (LOA)", settings.discountTierMode === "single" ? "1 langkah: tier yang mencakup (SPV / BM / CD)" : "Berurutan: SPV → BM → CD sampai tier yang mencakup"],
-                  ["Pesanan Khusus", "Branch Manager → Commercial Director"],
-                  ["Kelonggaran Limit Kredit", creditLabel],
-                  ["Pelanggan Baru (NOO)", "Sales SPV (verifikasi data) → Finance (limit kredit, TOP, price group)"],
-                  ["Tahap Pipeline", settings.pipelineStageApproval ? "Sales SPV untuk setiap perpindahan tahap" : settings.pipelineBatalApproval ? "Sales SPV untuk Batal" : "Tidak aktif"],
+                  ["Diskon (LOA)", settings.discountTierMode === "single" ? "1 langkah: Sales Supervisor dalam tiernya, di atasnya Admin" : "Berurutan: Sales Supervisor → Admin bila di atas tier Supervisor"],
+                  ["Pesanan Khusus (LOA)", "Sales Supervisor → Admin"],
+                  ["Limit Kredit (LOA)", settings.creditApprover === "admin" ? "Admin" : "Sales Supervisor"],
+                  ["New Customer (NOO)", "Sales Supervisor (verifikasi data) → Admin (limit kredit, TOP, price group)"],
+                  ["Pipeline", settings.pipelineStageApproval ? "Sales Supervisor untuk setiap perpindahan tahap" : settings.pipelineBatalApproval ? "Sales Supervisor untuk Batal" : "Tidak aktif"],
                 ].map(([k, v], i) => (
                   <TableRow key={k}>
                     <TableCell>{i + 1}</TableCell>
@@ -553,7 +551,7 @@ export function SettingsPage() {
 
         <SettingsCard
           title="Publish, kunci & permintaan perubahan PJP"
-          keys={["publishCutoff", "lockAfterPublish", "pjpApprover", "spvEditPjpDirect", "changeApprover", "changeRequestSlaHours"]}
+          keys={["publishCutoff", "lockAfterPublish", "pjpApprover", "spvEditPjpDirect", "changeRequestSlaHours"]}
         >
           {(d, set, ed) => (
             <>
@@ -565,14 +563,11 @@ export function SettingsPage() {
               <Row title="Kunci PJP setelah publish" hint="Perubahan sesudah publish lewat Permintaan Perubahan.">
                 <Switch checked={d.lockAfterPublish} disabled={!ed} onChange={(v) => set({ lockAfterPublish: v })} />
               </Row>
-              <Row title="Penyetuju PJP sebelum publish" hint="Draft → Menunggu Approval → Disetujui → Dipublikasikan. Wajib approval sebelum publish. Default BM untuk PJP buatan SPV; Admin selalu dapat memutuskan. Permission approve_pjp.">
-                <Pick value={d.pjpApprover} disabled={!ed} onChange={(v) => set({ pjpApprover: v })} options={[["bm", "Branch Manager (default)"], ["spv", "Sales SPV"], ["regional", "Regional Manager (CD)"]]} w="w-[200px]" />
+              <Row title="Penyetuju PJP sebelum publish" hint="Draft → Menunggu Approval → Disetujui → Dipublikasikan. Wajib approval sebelum publish. Default Admin untuk PJP buatan Sales Supervisor; Admin selalu dapat memutuskan. Permission approve_pjp.">
+                <Pick value={d.pjpApprover} disabled={!ed} onChange={(v) => set({ pjpApprover: v })} options={[["admin", "Admin (default)"], ["spv", "Sales Supervisor"]]} w="w-[200px]" />
               </Row>
               <Row title="SPV boleh mengubah PJP langsung (bypass approval)" hint="Default MATI. Bila aktif, edit SPV / Admin langsung berstatus Disetujui tanpa approval dan PJP terbit boleh diubah (perlu publish ulang).">
                 <Switch checked={d.spvEditPjpDirect} disabled={!ed} onChange={(v) => set({ spvEditPjpDirect: v })} />
-              </Row>
-              <Row title="Penyetuju permintaan perubahan" hint="Permission update_pjp + cakupan tim / cabang.">
-                <Pick value={d.changeApprover} disabled={!ed} onChange={(v) => set({ changeApprover: v })} options={[["spv", "SPV tim"], ["spv_bm", "SPV tim atau BM"]]} w="w-[180px]" />
               </Row>
               <Row title="SLA keputusan (jam)" hint="Lewat SLA ditandai merah di tab Permintaan Perubahan.">
                 <Input type="number" className="w-20 text-right" disabled={!ed} value={d.changeRequestSlaHours} onChange={(e) => set({ changeRequestSlaHours: Number(e.target.value) })} />
@@ -624,18 +619,18 @@ export function SettingsPage() {
 
         <SettingsCard
           title="Opsi default lain"
-          keys={["salesAdminReview", "orderWithoutVisitHQ", "nooOrderBeforeFinance", "minOrder"]}
+          keys={["orderReview", "orderWithoutVisitHQ", "nooOrderBeforeApproval", "minOrder"]}
         >
           {(d, set, ed) => (
             <>
-              <Row title="Review Sales Admin sebelum hand-off" hint="Default aktif (AS-20). Mati = pesanan yang lolos cek / approved langsung diteruskan.">
-                <Switch checked={d.salesAdminReview} disabled={!ed} onChange={(v) => set({ salesAdminReview: v })} />
+              <Row title="Review pesanan sebelum hand-off" hint="Default aktif (AS-20). Mati = pesanan yang lolos cek / approved langsung diteruskan.">
+                <Switch checked={d.orderReview} disabled={!ed} onChange={(v) => set({ orderReview: v })} />
               </Row>
               <Row title="Pesanan tanpa kunjungan" hint="Default aktif untuk HQ Direct Sales, mati untuk cabang.">
                 <Switch checked={d.orderWithoutVisitHQ} disabled={!ed} onChange={(v) => set({ orderWithoutVisitHQ: v })} />
               </Row>
-              <Row title="Izinkan pesanan pertama NOO sebelum approval Finance" hint="Default mati.">
-                <Switch checked={d.nooOrderBeforeFinance} disabled={!ed} onChange={(v) => set({ nooOrderBeforeFinance: v })} />
+              <Row title="Izinkan pesanan pertama NOO sebelum request disetujui" hint="Default mati.">
+                <Switch checked={d.nooOrderBeforeApproval} disabled={!ed} onChange={(v) => set({ nooOrderBeforeApproval: v })} />
               </Row>
               <Row title="Minimum nilai / qty pesanan per customer group" hint="Default mati.">
                 <Switch checked={d.minOrder} disabled={!ed} onChange={(v) => set({ minOrder: v })} />

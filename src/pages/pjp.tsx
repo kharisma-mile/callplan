@@ -27,8 +27,7 @@ function nextMonday(iso: string) {
 const weekAlt = (e: Pick<PjpEntry, "freq" | "weeks">) => (e.freq === "F1" ? e.weeks[0] - 1 : e.freq === "F2" ? (e.weeks[0] === 1 ? 0 : 1) : 0);
 type Tab = "plan" | "coverage" | "exec" | "requests" | "approval";
 const STEPS = ["Draft", "Menunggu Approval", "Disetujui", "Dipublikasikan"] as const;
-const APPROVER_ROLES = { bm: ["bm"], spv: ["spv"], regional: ["cd"] } as const;
-const APPROVER_LABEL = { bm: "Branch Manager", spv: "Sales SPV", regional: "Regional Manager" } as const;
+const APPROVER_LABEL = { admin: "Admin", spv: "Sales Supervisor" } as const;
 
 /** Small status stepper: Draft → Menunggu Approval → Disetujui → Dipublikasikan. */
 function Stepper({ status }: { status: string }) {
@@ -75,14 +74,14 @@ export function PjpPage() {
   /** Capacity by channel (HQ key account vs branch). */
   const settings = useMemo(() => withCapacity(baseSettings, s?.branchId), [baseSettings, s?.branchId]);
   /** Lock after publish: only SPV / Admin with "SPV edit langsung" change a published PJP directly; others go through a change request. */
-  const role = app.session?.role ?? "";
+  const role = app.session.role;
   const bypass = settings.spvEditPjpDirect && (role === "spv" || role === "admin");
   const pendingLock = header?.status === "Menunggu Approval";
   const locked = pendingLock || (settings.lockAfterPublish && header?.status === "Dipublikasikan" && !bypass);
-  const approverRoles = [...APPROVER_ROLES[settings.pjpApprover], "admin"] as string[];
-  const canApprovePjp = can("approve_pjp") && approverRoles.includes(role);
+  /** Admin can always decide; Sales Supervisor only when it is the configured approver. */
+  const canApprovePjp = can("approve_pjp") && (role === "admin" || role === settings.pjpApprover);
   const pendingPjps = pjpHeaders.filter((h) => h.status === "Menunggu Approval" && inScope(h.salesId));
-  const canApprove = can("update_pjp") && (settings.changeApprover === "spv_bm" ? ["spv", "bm", "admin"] : ["spv", "admin"]).includes(role);
+  const canApprove = can("update_pjp");
   const canCreate = can("create_pjp") && !locked;
   const canUpdate = can("update_pjp") && !locked;
   const canDelete = can("delete_pjp") && !locked;
@@ -491,7 +490,7 @@ export function PjpPage() {
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {pendingLock
             ? `PJP menunggu approval ${APPROVER_LABEL[settings.pjpApprover]} dan terkunci sampai diputuskan.`
-            : `PJP sudah dipublikasikan dan terkunci. Perubahan diajukan lewat tab Permintaan Perubahan (diputuskan ${settings.changeApprover === "spv" ? "SPV" : "SPV / BM"}); hasilnya menjadi versi Draft baru yang perlu approval ${APPROVER_LABEL[settings.pjpApprover]} sebelum publish.`}
+            : `PJP sudah dipublikasikan dan terkunci. Perubahan diajukan lewat tab Permintaan Perubahan (diputuskan Sales Supervisor); hasilnya menjadi versi Draft baru yang perlu approval ${APPROVER_LABEL[settings.pjpApprover]} sebelum publish.`}
         </p>
       )}
 
@@ -553,7 +552,7 @@ export function PjpPage() {
         <Card>
           <CardContent className="space-y-1 p-4 text-xs text-muted-foreground">
             <p>
-              Sales / BM mengajukan perubahan PJP (tambah, hapus, ubah hari); {settings.changeApprover === "spv" ? "SPV tim" : "SPV tim atau BM"} memutuskan dengan permission <code className="font-mono">update_pjp</code> (tanpa permission approval terpisah) dalam SLA {settings.changeRequestSlaHours} jam. Perubahan yang disetujui berlaku pada publish berikutnya.
+              Sales mengajukan perubahan PJP (tambah, hapus, ubah hari); Sales Supervisor tim memutuskan dengan permission <code className="font-mono">update_pjp</code> (tanpa permission approval terpisah) dalam SLA {settings.changeRequestSlaHours} jam. Perubahan yang disetujui berlaku pada publish berikutnya.
             </p>
             {settings.spvEditPjpDirect && <p>Pengaturan "SPV edit langsung" aktif: SPV juga dapat mengubah PJP langsung di tab Rencana PJP (geser, generate, import).</p>}
           </CardContent>
@@ -605,7 +604,7 @@ export function PjpPage() {
                         </Button>
                       </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground">{settings.changeApprover === "spv" ? "Diputuskan SPV (update_pjp)" : "Butuh update_pjp"}</span>
+                      <span className="text-xs text-muted-foreground">Butuh update_pjp</span>
                     )}
                   </TableCell>
                 </TableRow>

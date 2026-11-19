@@ -32,7 +32,7 @@ const REPORTS: { key: ReportKey; label: string; desc: string }[] = [
   { key: "call_compliance_report", label: "Laporan Call Compliance", desc: "Kunjungan aktual ÷ rencana PJP (extra call tidak masuk penyebut)." },
   { key: "order_report", label: "Laporan Pesanan", desc: "Pesanan dari Mile Field per status, outlet, salesman dan nilai." },
   { key: "approval_log", label: "Log Approval", desc: "Setiap keputusan approval: pengguna, role, permission, waktu, alasan." },
-  { key: "noo_report", label: "Laporan NOO", desc: "Registrasi pelanggan baru dan status approval SPV → Finance." },
+  { key: "noo_report", label: "Laporan NOO", desc: "Registrasi pelanggan baru dan status request Sales Supervisor → Admin." },
   { key: "pipeline_report", label: "Laporan Pipeline", desc: "Peluang per tahap, nilai estimasi, follow-up dan alasan batal." },
   { key: "survey_report", label: "Laporan Survey Kompetitor", desc: "Entri survey kompetitor dari kunjungan efektif (harga, merek, produk)." },
   { key: "target_achievement_report", label: "Laporan Pencapaian Target", desc: "Target vs aktual per salesman per bulan." },
@@ -367,7 +367,7 @@ function AdoptionView({ onExport, canExport, variant, scopeAll }: { onExport: (l
           </CardTitle>
           <p className="text-xs text-muted-foreground">
             Sales aktif = ≥ 1 check-in atau pesanan per hari kerja. % pesanan via app = pesanan Mile Field ÷{" "}
-            {variant === "A" ? "total SO di Odoo (sinkron)" : "total pesanan bulanan (input Sales Admin)"}. Target usulan: aktif ≥ 90% (2 bulan), via app ≥ 70% (3 bulan).
+            {variant === "A" ? "total SO di Odoo (sinkron)" : "total pesanan bulanan (input Admin)"}. Target usulan: aktif ≥ 90% (2 bulan), via app ≥ 70% (3 bulan).
           </p>
         </div>
         {canExport && (
@@ -406,7 +406,7 @@ function AdoptionView({ onExport, canExport, variant, scopeAll }: { onExport: (l
                 </TableCell>
                 <TableCell className="text-right">
                   {r.viaApp} / {r.total}
-                  {variant === "B" && <span className="block text-[11px] text-muted-foreground">penyebut: input Sales Admin</span>}
+                  {variant === "B" && <span className="block text-[11px] text-muted-foreground">penyebut: input Admin</span>}
                 </TableCell>
                 <TableCell>
                   <Meter value={o} target={70} />

@@ -268,7 +268,7 @@ function MoveDialog({ outlets: selected, onClose, onDone }: { outlets: Outlet[];
   const [tried, setTried] = useState(false);
   const isAll = roleMeta(user?.role).scope === "all";
   const fromBranches = new Set(selected.map((o) => salesOf(o.salesId).branchId));
-  // SPV: own team, BM: own branch (scopeSalesIds). Cross-branch only for Admin (scope "all").
+  // Sales Supervisor: own team (scopeSalesIds). Cross-branch only for Admin (scope "all").
   const candidates = SALESMEN.filter((s) => scopeSalesIds.includes(s.id) && (isAll || fromBranches.has(s.branchId)));
   const target = to ? salesOf(to) : undefined;
   const targetRoutes = routes.filter((r) => r.active && target && r.branchId === target.branchId && (!r.salesId || r.salesId === to));
@@ -298,7 +298,7 @@ function MoveDialog({ outlets: selected, onClose, onDone }: { outlets: Outlet[];
                 {candidates.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} · {branchOf(s.branchId).name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{isAll ? "Admin dapat memindahkan antar cabang." : "SPV: antar salesman di tim sendiri. BM: di cabang sendiri."}</p>
+            <p className="text-xs text-muted-foreground">{isAll ? "Admin dapat memindahkan antar cabang." : "Sales Supervisor: antar salesman di tim sendiri."}</p>
           </div>
           <div className="space-y-1.5">
             <Label>Rute tujuan</Label>

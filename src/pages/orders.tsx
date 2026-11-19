@@ -58,7 +58,7 @@ export function OrdersPage() {
   const submitApprovals = () => {
     if (!sel) return;
     const made = submitOrderApprovals(sel.id);
-    if (made.length) toast({ tone: "info", title: "Approval diajukan", desc: made.map((t) => APPROVAL_META[t].label).join(" · ") });
+    if (made.length) toast({ tone: "info", title: "Request diajukan", desc: made.map((t) => APPROVAL_META[t].label).join(" · ") });
   };
 
   /** Module 07 FR-007: qty / price / add / remove with a required reason; above-limit changes go back to approval (auto). */
@@ -95,7 +95,7 @@ export function OrdersPage() {
   };
 
   const pushToOdoo = (id: string, retry = false) => {
-    patch(id, (o) => log({ ...o, status: "Mengirim ke Odoo" }, retry ? "Kirim ulang ke Odoo (idempotent, client_order_ref = nomor pesanan)" : "Dikonfirmasi Sales Admin, dikirim ke Odoo"));
+    patch(id, (o) => log({ ...o, status: "Mengirim ke Odoo" }, retry ? "Kirim ulang ke Odoo (idempotent, client_order_ref = nomor pesanan)" : "Dikonfirmasi, dikirim ke Odoo"));
     setTimeout(() => {
       setOrders((l) =>
         l.map((o) => {
@@ -130,7 +130,7 @@ export function OrdersPage() {
         title="Review Pesanan"
         subtitle={
           A
-            ? "Varian A: pesanan dari Mile Field dicek ulang (harga, UoM, kredit), dikonfirmasi Sales Admin, lalu dibuat sebagai Sales Order draft di Odoo."
+            ? "Varian A: pesanan dari Mile Field dicek ulang (harga, UoM, kredit), dikonfirmasi di Review Pesanan, lalu dibuat sebagai Sales Order draft di Odoo."
             : "Varian B: pesanan dari Mile Field dicek terhadap price list dan piutang di modul; status pesanan dikelola langsung di modul."
         }
         action={
@@ -148,7 +148,7 @@ export function OrdersPage() {
       />
 
       <p className="text-xs text-muted-foreground">
-        Pemicu approval: <b>{autoMode ? "otomatis saat pesanan masuk" : "oleh Sales Admin (tombol Ajukan approval)"}</b> · ubah di Pengaturan.
+        Pemicu approval: <b>{autoMode ? "otomatis saat pesanan masuk" : "manual (tombol Ajukan approval)"}</b> · ubah di Pengaturan.
       </p>
       <div className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-muted p-1">
         {(
@@ -302,7 +302,7 @@ export function OrdersPage() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Saldo piutang</span><span>{rupiah(outlet.outstanding)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Jatuh tempo</span><span className={outlet.overdueDays > settings.overdueDays ? "font-semibold text-[#BF2130]" : ""}>{outlet.overdue ? `${rupiah(outlet.overdue)} · ${outlet.overdueDays} hr` : "—"}</span></div>
                   <div className="flex justify-between border-t border-border pt-1"><span className="text-muted-foreground">Setelah pesanan</span><span className="font-semibold">{rupiah(outlet.outstanding + orderTotal(sel))}</span></div>
-                  <p className="pt-1 text-[11px] text-muted-foreground">{A ? "Sumber: Odoo (sinkron per jam + cek ulang saat kirim SO) · per 17 Nov 2026 10:00" : "Sumber: piutang di modul (diperbarui Finance via import Excel) · per 16 Nov 2026 17:02"}</p>
+                  <p className="pt-1 text-[11px] text-muted-foreground">{A ? "Sumber: Odoo (sinkron per jam + cek ulang saat kirim SO) · per 17 Nov 2026 10:00" : "Sumber: piutang di modul (diperbarui Admin via import Excel) · per 16 Nov 2026 17:02"}</p>
                 </div>
                 <div className="space-y-1 rounded-md bg-muted p-3 text-sm">
                   <p className="mb-1 font-semibold">Ringkasan</p>
@@ -427,7 +427,7 @@ export function OrdersPage() {
                     <Label>Harga (Rp)</Label>
                     <Input type="number" min={0} value={itemEdit.price} onChange={(e) => setItemEdit({ ...itemEdit, price: Number(e.target.value) })} />
                   </div>
-                  <p className="col-span-2 text-xs text-muted-foreground">Harga di luar price list memicu Approval Pesanan Khusus ulang (AS-20).</p>
+                  <p className="col-span-2 text-xs text-muted-foreground">Harga di luar price list memicu Request Pesanan Khusus ulang (AS-20).</p>
                 </div>
               )}
               {itemEdit.mode === "add" && (

@@ -1,4 +1,5 @@
-export type RoleKey = "admin" | "cd" | "bm" | "spv" | "sales_admin" | "finance";
+/** D-52: v1 ships two built-in roles; more can be added as custom roles (Shield pattern). */
+export type RoleKey = "admin" | "spv";
 export type Variant = "A" | "B";
 export type ScopeType = "all" | "branch" | "team";
 
@@ -182,7 +183,7 @@ export interface PjpShift {
   to: string;
 }
 
-/** Module 04: PJP change request from Sales / BM, decided by SPV with `update_pjp`. */
+/** Module 04: PJP change request from Sales, decided by SPV with `update_pjp`. */
 export interface PjpChangeRequest {
   id: string;
   salesId: string;
@@ -266,7 +267,7 @@ export interface ApprovalRequest {
   discountPct?: number;
   toStage?: OppStage;
   outletId?: string;
-  /** NOO step 2: credit data set by Finance. */
+  /** NOO step 2: credit data set by Admin. */
   nooCredit?: { limit: number; top: number; priceGroup: string };
 }
 
@@ -330,7 +331,8 @@ export interface TargetChange {
 }
 
 export interface LoaTier {
-  role: RoleKey;
+  /** "sales" = first tier, Sales may give it without approval. */
+  role: "sales" | RoleKey;
   label: string;
   max: number | null; // null = di atas tier sebelumnya
 }
@@ -343,16 +345,16 @@ export interface Settings {
   existingCustomerPipeline: boolean;
   overdueDays: number;
   loa: LoaTier[];
-  /** Module 06 FR-002: approval requests created automatically on order ingest (PRD default) or by Sales Admin. */
+  /** Module 06 FR-002: approval requests created automatically on order ingest (PRD default) or manually from order review. */
   approvalTrigger: "auto" | "manual";
   /** Single covering tier (PRD default) or sequential through every tier below. */
   discountTierMode: "single" | "sequential";
   discountBasis: "line" | "order";
-  creditApprover: "finance_or_bm" | "finance" | "bm";
+  creditApprover: "spv" | "admin";
   slaHours: number;
-  salesAdminReview: boolean;
+  orderReview: boolean;
   orderWithoutVisitHQ: boolean;
-  nooOrderBeforeFinance: boolean;
+  nooOrderBeforeApproval: boolean;
   minOrder: boolean;
   geofenceM: number;
   /** D-48: default frequency for new PJP entries / generate (frequency lives only on the PJP entry). */
@@ -387,7 +389,6 @@ export interface Settings {
   /** Publish / lock and change-request rules. */
   publishCutoff: string;
   lockAfterPublish: boolean;
-  changeApprover: "spv" | "spv_bm";
   changeRequestSlaHours: number;
   /** Auto-generate parameters. */
   generateKeepRoute: boolean;
@@ -396,8 +397,8 @@ export interface Settings {
   reminderTime: string;
   /** Bypass: SPV / Admin edit PJP langsung tanpa approval (default off). */
   spvEditPjpDirect: boolean;
-  /** Who approves a PJP before publish (permission approve_pjp). "regional" = Regional Manager (CD). */
-  pjpApprover: "bm" | "spv" | "regional";
+  /** Who approves a PJP before publish (permission approve_pjp); Admin can always decide. */
+  pjpApprover: "admin" | "spv";
   /** Module 02 assortment: segment without assortment offers all active products ("all") or nothing ("none"). */
   assortmentFallback: "all" | "none";
   /** Module 03 plotting, Varian A: write the outlet owner back to Odoo (res.partner.user_id). */

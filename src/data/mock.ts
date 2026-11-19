@@ -108,7 +108,7 @@ function personName() {
   }
 }
 // fixed demo personas
-["Dewi Lestari", "Budi Santoso", "Hendra Wijaya", "Rina Kusuma", "Sari Anggraini", "Agus Setiawan"].forEach((n) => usedNames.add(n));
+["Dewi Lestari", "Rina Kusuma"].forEach((n) => usedNames.add(n));
 
 for (const b of BRANCHES) {
   const spvCount = b.id === "HQ" ? 1 : 2;
@@ -317,7 +317,7 @@ export const PJP_HEADERS: PjpHeader[] = SALESMEN.map((s, i) => ({
   note: s.id === "S-SBY-02" ? "Disetujui, menunggu publish" : s.id === "S-SBY-03" ? "Diajukan SPV, menunggu approval" : undefined,
   submittedBy: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? "SPV Surabaya" : undefined,
   submittedAt: s.id === "S-SBY-02" || s.id === "S-SBY-03" ? "2026-11-17 15:00" : undefined,
-  approvedBy: s.id === "S-SBY-02" ? "BM Surabaya" : undefined,
+  approvedBy: s.id === "S-SBY-02" ? "Rina Kusuma" : undefined,
   approvedAt: s.id === "S-SBY-02" ? "2026-11-17 16:30" : undefined,
 }));
 
@@ -468,11 +468,11 @@ export const DEFAULT_SETTINGS: Settings = {
   approvalTrigger: "auto",
   discountTierMode: "single",
   discountBasis: "order",
-  creditApprover: "finance_or_bm",
+  creditApprover: "spv",
   slaHours: 24,
-  salesAdminReview: true,
+  orderReview: true,
   orderWithoutVisitHQ: true,
-  nooOrderBeforeFinance: false,
+  nooOrderBeforeApproval: false,
   minOrder: false,
   geofenceM: 100,
   defaultFreq: "F2",
@@ -497,18 +497,16 @@ export const DEFAULT_SETTINGS: Settings = {
   carryOverMaxDays: 2,
   publishCutoff: "18:00",
   lockAfterPublish: true,
-  changeApprover: "spv",
   changeRequestSlaHours: 24,
   generateKeepRoute: true,
   routeStartPoint: "branch",
   reminderTime: "07:00",
   spvEditPjpDirect: false,
-  pjpApprover: "bm",
+  pjpApprover: "admin",
   loa: [
-    { role: "sales_admin", label: "Sales (tanpa approval)", max: 2 },
-    { role: "spv", label: "Sales SPV", max: 5 },
-    { role: "bm", label: "Branch Manager", max: 10 },
-    { role: "cd", label: "Commercial Director", max: null },
+    { role: "sales", label: "Sales (tanpa approval)", max: 2 },
+    { role: "spv", label: "Sales Supervisor", max: 5 },
+    { role: "admin", label: "Admin", max: null },
   ],
   assortmentFallback: "all",
   odooWriteBackSalesperson: false,
@@ -586,20 +584,7 @@ export const VISITS: VisitStat[] = (() => {
 /* ---------- users (synced from MileApp) ---------- */
 export const USERS: ModuleUser[] = [
   { id: "U1", name: "Rina Kusuma", email: "rina.kusuma@unggulplastik.co.id", role: "admin", active: true, syncedAt: "2026-11-17 06:00" },
-  { id: "U2", name: "Hendra Wijaya", email: "hendra.wijaya@unggulplastik.co.id", role: "cd", active: true, syncedAt: "2026-11-17 06:00" },
-  { id: "U3", name: "Budi Santoso", email: "budi.santoso@unggulplastik.co.id", role: "bm", branchId: "SBY", active: true, syncedAt: "2026-11-17 06:00" },
   { id: "U4", name: "Dewi Lestari", email: "dewi.lestari@unggulplastik.co.id", role: "spv", branchId: "SBY", spvId: "SPV-SBY-1", active: true, syncedAt: "2026-11-17 06:00" },
-  { id: "U5", name: "Sari Anggraini", email: "sari.anggraini@unggulplastik.co.id", role: "sales_admin", branchId: "SBY", active: true, syncedAt: "2026-11-17 06:00" },
-  { id: "U6", name: "Agus Setiawan", email: "agus.setiawan@unggulplastik.co.id", role: "finance", active: true, syncedAt: "2026-11-17 06:00" },
-  ...BRANCHES.filter((b) => b.id !== "SBY" && b.id !== "HQ").map((b, i) => ({
-    id: `UB${i}`,
-    name: personName(),
-    email: `bm.${b.id.toLowerCase()}@unggulplastik.co.id`,
-    role: "bm" as const,
-    branchId: b.id,
-    active: true,
-    syncedAt: "2026-11-17 06:00",
-  })),
   ...SPVS.filter((s) => s.id !== "SPV-SBY-1").map((s, i) => ({
     id: `US${i}`,
     name: s.name,
@@ -639,8 +624,8 @@ export const IMPORT_TEMPLATES = [
 export const IMPORT_LOGS: ImportLog[] = [
   { id: "L1", kind: "Import", template: "Pelanggan", file: "import-awal-pelanggan-odoo.xlsx", by: "Rina Kusuma", at: "2026-11-02 09:10", accepted: 5784, rejected: 37 },
   { id: "L2", kind: "Import", template: "Produk & UoM", file: "import-awal-produk.xlsx", by: "Rina Kusuma", at: "2026-11-02 09:25", accepted: 412, rejected: 0 },
-  { id: "L3", kind: "Import", template: "Piutang & limit kredit", file: "piutang-per-161126.xlsx", by: "Agus Setiawan", at: "2026-11-16 17:02", accepted: 1961, rejected: 4 },
-  { id: "L4", kind: "Export", template: "Pesanan", file: "pesanan-sby-nov.xlsx", by: "Sari Anggraini", at: "2026-11-16 17:30", accepted: 128, rejected: 0 },
+  { id: "L3", kind: "Import", template: "Piutang & limit kredit", file: "piutang-per-161126.xlsx", by: "Rina Kusuma", at: "2026-11-16 17:02", accepted: 1961, rejected: 4 },
+  { id: "L4", kind: "Export", template: "Pesanan", file: "pesanan-sby-nov.xlsx", by: "Dewi Lestari", at: "2026-11-16 17:30", accepted: 128, rejected: 0 },
 ];
 
 export const CUSTOMER_STATUS_LABEL: Record<CustomerStatus, string> = {

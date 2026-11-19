@@ -35,7 +35,7 @@ function VisitDaysBadge({ days }: { days?: number[] }) {
 
 /** Module 01 FR-009: the customer status is derived by a job, never entered manually. */
 export function statusRule(s: CustomerStatus, variant: Variant) {
-  if (s === "baru") return "Pelanggan Baru: prospek / NOO yang belum disetujui Finance (belum menjadi pelanggan UP).";
+  if (s === "baru") return "Pelanggan Baru: prospek / NOO yang belum disetujui (belum menjadi pelanggan UP).";
   if (s === "lama_belum") return "Pelanggan Lama – belum beli: NOO sudah disetujui (pelanggan aktif) tetapi belum ada pesanan " + (variant === "A" ? "yang ter-invoice di Odoo." : "berstatus Selesai di modul.");
   return "Pelanggan Lama – sudah beli: punya ≥ 1 " + (variant === "A" ? "SO Odoo yang sudah di-invoice." : "pesanan modul berstatus Selesai (atau dari import awal).");
 }
@@ -426,7 +426,7 @@ export function OutletsPage() {
                 <p className="text-xs text-muted-foreground">{statusRule(detail.status, settings.variant)}</p>
                 <div>
                   <p className="mb-2 text-sm font-semibold">
-                    Ringkasan piutang <span className="font-normal text-muted-foreground">· per {A ? "17 Nov 2026 10:00 (Odoo, sinkron per jam)" : "16 Nov 2026 17:02 (import Finance)"}</span>
+                    Ringkasan piutang <span className="font-normal text-muted-foreground">· per {A ? "17 Nov 2026 10:00 (Odoo, sinkron per jam)" : "16 Nov 2026 17:02 (import Admin)"}</span>
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {[
@@ -448,7 +448,7 @@ export function OutletsPage() {
                   )}
                   {detail.overdueDays > settings.overdueDays && (
                     <p className="mt-2 rounded-md bg-[#FAE5E7] p-2 text-xs text-[#68121A]">
-                      Piutang jatuh tempo &gt; {settings.overdueDays} hari: pesanan baru wajib melalui Approval Kelonggaran Limit Kredit.
+                      Piutang jatuh tempo &gt; {settings.overdueDays} hari: pesanan baru wajib melalui Request LOA (Limit Kredit).
                     </p>
                   )}
                 </div>
@@ -646,7 +646,7 @@ export function OutletsPage() {
                   <Input type="number" disabled={lockCredit} value={edit.top} onChange={(e) => setEdit({ ...edit, top: Number(e.target.value) })} />
                 </div>
                 {!A && !canEditCredit && (
-                  <p className="col-span-2 text-xs text-muted-foreground">Limit kredit, TOP dan price group hanya dapat diubah pemegang permission <code className="font-mono">update_credit_limit</code> (default Finance).</p>
+                  <p className="col-span-2 text-xs text-muted-foreground">Limit kredit, TOP dan price group hanya dapat diubah pemegang permission <code className="font-mono">update_credit_limit</code> (default Admin).</p>
                 )}
               </div>
               <DialogFooter>

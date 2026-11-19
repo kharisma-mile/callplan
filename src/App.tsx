@@ -3,7 +3,6 @@ import { AppSidebar, useVisibleNav } from "@/components/app-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/toaster";
 import { AppProvider, useApp } from "@/store/app-store";
-import { LoginPage } from "@/pages/login";
 import { DashboardPage } from "@/pages/dashboard";
 import { PjpPage } from "@/pages/pjp";
 import { OutletsPage } from "@/pages/outlets";
@@ -20,7 +19,7 @@ import { ReportsPage } from "@/pages/reports";
 import { PlottingPage } from "@/pages/plotting";
 import { AssortmentPage } from "@/pages/assortment";
 import { NoAccess } from "@/components/empty-state";
-import type { ApprovalType } from "@/data/types";
+import type { RequestPage } from "@/lib/rbac";
 
 const readHash = () => window.location.hash.replace(/^#\/?/, "") || "dashboard";
 
@@ -43,15 +42,13 @@ function Shell() {
   // when the role changes (or permissions are revoked) fall back to the first allowed page
   const allowed = nav.some((n) => n.key === route);
   useEffect(() => {
-    if (session && !allowed && nav.length) navigate(nav[0].key);
+    if (!allowed && nav.length) navigate(nav[0].key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.userId, session?.role, allowed]);
-
-  if (!session) return <LoginPage />;
+  }, [session.userId, session.role, allowed]);
 
   let page: JSX.Element;
   if (!allowed) page = <NoAccess perm="(halaman ini)" />;
-  else if (route.startsWith("approval/")) page = <ApprovalPage key={route} type={route.split("/")[1] as ApprovalType} />;
+  else if (route.startsWith("request/")) page = <ApprovalPage key={route} page={route.split("/")[1] as RequestPage} />;
   else
     page =
       {

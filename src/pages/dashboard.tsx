@@ -9,9 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StageBadge } from "@/components/status-badge";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
 import { BRANCHES, CURRENT_MONTH, PRODUCTS, SALESMEN, TODAY, VISITS } from "@/data/mock";
-import { APPROVAL_META } from "@/lib/rbac";
+import { APPROVAL_META, requestPageOf } from "@/lib/rbac";
 import { fmtDate, fmtMonth, pct, rupiahShort } from "@/lib/format";
-import type { OppStage } from "@/data/types";
+import type { ApprovalType, OppStage } from "@/data/types";
 
 const STAGES: OppStage[] = ["Prospek", "Dijadwalkan", "Kunjungan & Negosiasi", "Menang", "Batal"];
 
@@ -35,7 +35,7 @@ function Bar({ label, sub, actual, target, tone = "primary" }: { label: string; 
 
 export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void }) {
   const { user, scopeSalesIds, inScope, targets, opps, approvals, orders, canActOnStep, scopeLabel, roleMeta, can } = useApp();
-  const showOverdue = user!.role === "spv" || user!.role === "bm";
+  const showOverdue = user!.role === "spv";
   const role = user!.role;
   const scope = roleMeta(role).scope;
 
@@ -70,10 +70,10 @@ export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void 
     return { s, count: list.length, value: list.reduce((a, o) => a + o.value, 0) };
   });
   const maxStage = Math.max(1, ...stageStats.map((s) => s.value));
-  const pendingByType = Object.keys(APPROVAL_META).map((t) => ({ t, n: data.pending.filter((p) => p.type === t).length })).filter((x) => x.n > 0);
+  const pendingByType = (Object.keys(APPROVAL_META) as ApprovalType[]).map((t) => ({ t, n: data.pending.filter((p) => p.type === t).length })).filter((x) => x.n > 0);
 
   const topPending = [...pendingByType].sort((a, b) => b.n - a.n)[0]?.t;
-  const firstApprovalPage = (Object.keys(APPROVAL_META) as (keyof typeof APPROVAL_META)[]).find((t) => can(`view_any_${APPROVAL_META[t].resource}`));
+  const firstApprovalPage = (Object.keys(APPROVAL_META) as ApprovalType[]).find((t) => can(`view_any_${APPROVAL_META[t].resource}`));
   const approvalTarget = topPending ?? firstApprovalPage;
   const reviewCount = orders.filter((o) => inScope(o.salesId) && o.status === "Menunggu Review").length;
 
@@ -102,17 +102,17 @@ export function DashboardPage({ onNavigate }: { onNavigate: (k: string) => void 
             tone="danger"
             label="Pesanan menunggu review"
             value={String(reviewCount)}
-            hint="antrian Sales Admin"
+            hint="antrian review pesanan"
             onClick={can("view_any_order") ? () => onNavigate("orders") : undefined}
           />
         )}
         <StatCard
           icon={ClipboardCheck}
           tone="warning"
-          label="Approval menunggu Anda"
+          label="Request menunggu Anda"
           value={String(data.pending.length)}
-          hint={pendingByType.map((p) => `${APPROVAL_META[p.t as keyof typeof APPROVAL_META].short} ${p.n}`).join(" · ") || "tidak ada"}
-          onClick={approvalTarget ? () => onNavigate(`approval/${approvalTarget}`) : undefined}
+          hint={pendingByType.map((p) => `${APPROVAL_META[p.t].short} ${p.n}`).join(" · ") || "tidak ada"}
+          onClick={approvalTarget ? () => onNavigate(`request/${requestPageOf(approvalTarget)}`) : undefined}
         />
       </div>
 
