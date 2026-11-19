@@ -2,38 +2,33 @@
  * No imports from mock.ts (avoids a circular import). */
 import type { Frequency, Holiday, Outlet, PjpEntry, Route } from "./types";
 
-export const FREQS: Frequency[] = ["F1", "F2", "F4", "F8", "F12"];
+export const FREQS: Frequency[] = ["F4", "F2", "F1"];
 
-export const FREQ_META: Record<Frequency, { label: string; short: string; perWeek: number; allWeeks: boolean; rank: number }> = {
-  F1: { label: "F1 · 1×/4 minggu", short: "1× / 4 mgg", perWeek: 1, allWeeks: false, rank: 1 },
-  F2: { label: "F2 · 2 minggu sekali", short: "2× / 4 mgg", perWeek: 1, allWeeks: false, rank: 2 },
-  F4: { label: "F4 · tiap minggu", short: "4× / 4 mgg", perWeek: 1, allWeeks: true, rank: 4 },
-  F8: { label: "F8 · 2×/minggu", short: "8× / 4 mgg", perWeek: 2, allWeeks: true, rank: 8 },
-  F12: { label: "F12 · 3×/minggu", short: "12× / 4 mgg", perWeek: 3, allWeeks: true, rank: 12 },
+/** Visit more than 1x/week = F4 + extra call (D-47); extra calls are not part of the PJP. */
+export const FREQ_HINT = "Butuh kunjungan lebih dari 1× seminggu? Pakai F4 + extra call.";
+
+export const FREQ_META: Record<Frequency, { label: string; short: string; rank: number }> = {
+  F1: { label: "Bulanan (F1)", short: "1× / 4 mgg", rank: 1 },
+  F2: { label: "2 Mingguan (F2)", short: "2× / 4 mgg", rank: 2 },
+  F4: { label: "Mingguan (F4)", short: "4× / 4 mgg", rank: 4 },
 };
 
-/** Week pattern: F1 → one week (alt 0..3), F2 → M1&M3 (alt even) / M2&M4 (alt odd), F4+ → all weeks. */
+/** Week pattern: F1 → one week (alt 0..3), F2 → M1&M3 (alt even) / M2&M4 (alt odd), F4 → all weeks. */
 export function weeksFor(freq: Frequency, alt = 0): number[] {
   if (freq === "F1") return [(alt % 4) + 1];
   if (freq === "F2") return alt % 2 === 0 ? [1, 3] : [2, 4];
   return [1, 2, 3, 4];
 }
 
-/** Default visit days from a base day: F8 → base + 3 days (Mon & Thu), F12 → every 2 days (Mon, Wed, Fri). */
-export function daysFor(freq: Frequency, base: number): number[] {
-  if (freq === "F8") return [base, (base + 3) % 6].sort((a, b) => a - b);
-  if (freq === "F12") return [base, (base + 2) % 6, (base + 4) % 6].sort((a, b) => a - b);
-  return [base];
-}
-
-export const callsPerCycle = (e: Pick<PjpEntry, "weeks" | "days">) => e.weeks.length * e.days.length;
-export const isOn = (e: Pick<PjpEntry, "weeks" | "days">, week: number, day: number) => e.weeks.includes(week) && e.days.includes(day);
+/** One visit day per entry, so calls per cycle = number of weeks. */
+export const callsPerCycle = (e: Pick<PjpEntry, "weeks">) => e.weeks.length;
+export const isOn = (e: Pick<PjpEntry, "weeks" | "day">, week: number, day: number) => e.day === day && e.weeks.includes(week);
 export const validOn = (e: Pick<PjpEntry, "validFrom" | "validTo">, date: string) => e.validFrom <= date && (!e.validTo || e.validTo >= date);
 
 /** 4 x 6 load matrix [week-1][day]. */
-export function loadMatrix(entries: Pick<PjpEntry, "weeks" | "days">[]): number[][] {
+export function loadMatrix(entries: Pick<PjpEntry, "weeks" | "day">[]): number[][] {
   const m = [0, 1, 2, 3].map(() => [0, 0, 0, 0, 0, 0]);
-  for (const e of entries) for (const w of e.weeks) for (const d of e.days) m[w - 1][d]++;
+  for (const e of entries) for (const w of e.weeks) m[w - 1][e.day]++;
   return m;
 }
 
@@ -71,22 +66,19 @@ export interface GenerateInput {
   nextId: () => string;
   /** Working days of the branch (default Mon-Sat). */
   workDays?: number[];
-  /** Load weight per outlet: 1 = balance by call count; visit minutes / average = balance by duration. */
-  weightOf?: (o: Outlet) => number;
   /** false = ignore the beat day and place each outlet on the lightest day. */
   keepRoute?: boolean;
 }
 
 /**
- * Builds PJP entries from outlet frequency + route (beat day) + route sequence, balancing the workload:
- * F4/F8/F12 are fixed on the beat day(s); F2 picks the week pattern and F1 the week with the lowest load,
+ * Builds PJP entries from the given frequency (Settings default, D-48) + route (beat day) + route sequence, balancing the workload:
+ * F4 is fixed on the beat day; F2 picks the week pattern and F1 the week with the lowest load,
  * and moves to a neighbouring day only when the beat day is above the daily target.
  */
 export function generatePjp(inp: GenerateInput): PjpEntry[] {
   const load = [0, 1, 2, 3].map(() => [0, 0, 0, 0, 0, 0]);
   const work = inp.workDays?.length ? inp.workDays : [0, 1, 2, 3, 4, 5];
   const nearestWork = (d: number) => [d, d + 1, d - 1, d + 2, d - 2, d + 3, d - 3].find((x) => x >= 0 && x <= 5 && work.includes(x)) ?? work[0];
-  const weight = inp.weightOf ?? (() => 1);
   const routeDay = new Map(inp.routes.filter((r) => r.salesId === inp.salesId).map((r) => [r.id, r.day ?? 0]));
   const dayTotal = (d: number) => load.reduce((a, w) => a + w[d], 0);
   const list = inp.outlets
@@ -94,11 +86,10 @@ export function generatePjp(inp: GenerateInput): PjpEntry[] {
     .sort((a, b) => FREQ_META[b.f].rank - FREQ_META[a.f].rank || (a.o.routeId ?? "").localeCompare(b.o.routeId ?? "") || (a.o.routeSeq ?? 0) - (b.o.routeSeq ?? 0));
   const out: PjpEntry[] = [];
   for (const { o, f } of list) {
-    const wt = weight(o);
     let base = inp.keepRoute !== false && o.routeId !== undefined ? routeDay.get(o.routeId) : undefined;
     if (base === undefined) base = work.reduce((m, d) => (dayTotal(d) < dayTotal(m) ? d : m), work[0]);
     base = nearestWork(base);
-    let days = [...new Set(daysFor(f, base).map(nearestWork))].sort((a, b) => a - b);
+    let day = base;
     let weeks = [1, 2, 3, 4];
     let moved = false;
     if (f === "F1" || f === "F2") {
@@ -107,21 +98,21 @@ export function generatePjp(inp: GenerateInput): PjpEntry[] {
       let best = { cost: Infinity, d: base, w: weekOpts[0] };
       for (const d of dayOpts)
         for (const w of weekOpts) {
-          const peak = Math.max(...w.map((x) => load[x - 1][d])) + wt;
+          const peak = Math.max(...w.map((x) => load[x - 1][d])) + 1;
           const cost = Math.max(0, peak - inp.target) * 100 + peak + (d !== base ? 6 : 0);
           if (cost < best.cost) best = { cost, d, w };
         }
-      days = [best.d];
+      day = best.d;
       weeks = best.w;
       moved = best.d !== base;
     }
-    for (const w of weeks) for (const d of days) load[w - 1][d] += wt;
+    for (const w of weeks) load[w - 1][day]++;
     out.push({
       id: inp.nextId(),
       salesId: inp.salesId,
       outletId: o.id,
       routeId: o.routeId,
-      days,
+      day,
       freq: f,
       weeks,
       seq: (o.routeSeq ?? 50) + (moved ? 100 : 0),

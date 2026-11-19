@@ -10,14 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ClassBadge } from "@/components/status-badge";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
 import { DAYS, HOLIDAYS, SALESMEN, TODAY, addDays, cycleDate, cyclePos, cycleStart, nextPjpId } from "@/data/mock";
-import { FREQS, FREQ_META, callsPerCycle, daysFor, isHoliday, isOn, loadMatrix, validOn, weeksFor } from "@/data/pjp-engine";
+import { FREQS, FREQ_HINT, FREQ_META, callsPerCycle, isHoliday, isOn, loadMatrix, validOn, weeksFor } from "@/data/pjp-engine";
 import type { Frequency, Outlet, PjpChangeRequest, PjpEntry } from "@/data/types";
 import { fmtDate, nowStamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { dayOff, withCapacity, CoveragePanel, DAY_SHORT, ExecutionPanel, GenerateDialog, ImportDialog, LoadHeat, TONE_CLS, capTone, dayEstimate, fmtDur, fmtShort, freqOf, plannedFor } from "./pjp-panels";
+import { dayOff, withCapacity, CoveragePanel, DAY_SHORT, ExecutionPanel, GenerateDialog, ImportDialog, LoadHeat, TONE_CLS, capTone, dayEstimate, fmtDur, fmtShort, plannedFor } from "./pjp-panels";
 
 const CURRENT_WEEK = cyclePos(TODAY)?.week ?? 3;
 /** Default "Berlaku mulai": the next Monday after today. */
@@ -155,19 +154,14 @@ export function PjpPage() {
   const moveToDay = (id: string, from: number, to: number) => {
     const e = entries.find((x) => x.id === id);
     if (!e || from === to) return;
-    if (e.days.includes(to)) {
-      toast({ tone: "warning", title: "Sudah terjadwal di hari itu", desc: `${outletMap.get(e.outletId)?.name} sudah dikunjungi hari ${DAYS[to]}.` });
-      return;
-    }
-    const days = e.days.map((d) => (d === from ? to : d)).sort((a, b) => a - b);
-    const seq = Math.max(0, ...entries.filter((x) => x.days.includes(to)).map((x) => x.seq)) + 1;
-    update(id, { days, seq });
+    const seq = Math.max(0, ...entries.filter((x) => x.day === to).map((x) => x.seq)) + 1;
+    update(id, { day: to, seq });
     const peak = Math.max(...e.weeks.map((w) => matrix[w - 1][to] + 1));
     toast({ tone: "info", title: "Kunjungan dipindah", desc: `${outletMap.get(e.outletId)?.name}: ${DAYS[from]} → ${DAYS[to]} (${e.freq})` });
     capacityWarn(peak, s.name, DAYS[to]);
   };
   const reorder = (id: string, beforeId: string, day: number) => {
-    const dayList = entries.filter((x) => x.days.includes(day) && x.id !== id);
+    const dayList = entries.filter((x) => x.day === day && x.id !== id);
     const i = dayList.findIndex((x) => x.id === beforeId);
     const dragged = entries.find((x) => x.id === id);
     if (!dragged || i < 0) return;
@@ -180,20 +174,20 @@ export function PjpPage() {
     const e = entries.find((x) => x.id === id);
     if (!e || toSales === salesId) return;
     const t = salesOf(toSales);
-    const route = routes.find((r) => r.salesId === toSales && r.day === e.days[0]);
+    const route = routes.find((r) => r.salesId === toSales && r.day === e.day);
     const tEntries = pjp.filter((x) => x.salesId === toSales && validOn(x, TODAY));
     const tm = loadMatrix([...tEntries, e]);
-    const peak = Math.max(...e.days.map((d) => Math.max(...e.weeks.map((w) => tm[w - 1][d]))));
+    const peak = Math.max(...e.weeks.map((w) => tm[w - 1][e.day]));
     setPjp((list) => list.map((x) => (x.id === id ? { ...x, salesId: toSales, routeId: route?.id, seq: 99 } : x)));
     setOutlets((list) => list.map((o) => (o.id === e.outletId ? { ...o, salesId: toSales, routeId: route?.id } : o)));
     markChanged([salesId, toSales]);
     const name = outletMap.get(e.outletId)?.name;
-    addAudit({ module: "PJP", action: "Kunjungan dipindah ke salesman lain", target: name ?? e.outletId, detail: `${s.name} → ${t.name} · ${e.days.map((d) => DAYS[d]).join(" & ")} (update_pjp)` });
+    addAudit({ module: "PJP", action: "Kunjungan dipindah ke salesman lain", target: name ?? e.outletId, detail: `${s.name} → ${t.name} · ${DAYS[e.day]} (update_pjp)` });
     toast({ tone: "success", title: "Outlet dipindah ke salesman lain", desc: `${name} → ${t.name}${route ? ` · ${route.name}` : ""}` });
-    capacityWarn(peak, t.name, e.days.map((d) => DAYS[d]).join(" & "));
+    capacityWarn(peak, t.name, DAYS[e.day]);
   };
   const move = (id: string, dir: -1 | 1, day: number) => {
-    const dayList = entries.filter((x) => x.days.includes(day));
+    const dayList = entries.filter((x) => x.day === day);
     const i = dayList.findIndex((x) => x.id === id);
     const j = i + dir;
     if (i < 0 || j < 0 || j >= dayList.length) return;
@@ -202,30 +196,19 @@ export function PjpPage() {
     setPjp((list) => list.map((x) => (seqMap.has(x.id) ? { ...x, seq: seqMap.get(x.id)! } : x)));
     markChanged([salesId]);
   };
-  const changeFreq = (e: PjpEntry, f: Frequency) => update(e.id, { freq: f, weeks: weeksFor(f, weekAlt(e)), days: daysFor(f, e.days[0]) });
-  const toggleDay = (e: PjpEntry, d: number) => {
-    const need = FREQ_META[e.freq].perWeek;
-    if (need === 1) return update(e.id, { days: [d] });
-    if (e.days.includes(d)) {
-      if (e.days.length > 1) update(e.id, { days: e.days.filter((x) => x !== d) });
-      return;
-    }
-    const days = [...e.days, d];
-    update(e.id, { days: (days.length > need ? days.slice(1) : days).sort((a, b) => a - b) });
-  };
+  const changeFreq = (e: PjpEntry, f: Frequency) => update(e.id, { freq: f, weeks: weeksFor(f, weekAlt(e)) });
 
   const addEntry = () => {
     const o = outletMap.get(form.outletId);
     if (!o) return;
     const day = Number(form.day);
-    const days = daysFor(form.freq, day);
     const route = routes.find((r) => r.salesId === salesId && r.day === day);
-    const entry: PjpEntry = { id: nextPjpId(), salesId, outletId: o.id, routeId: route?.id, days, freq: form.freq, weeks: weeksFor(form.freq, Number(form.alt)), seq: Math.max(0, ...entries.filter((x) => x.days.includes(day)).map((x) => x.seq)) + 1, validFrom: form.validFrom || nextMonday(TODAY), validTo: form.validTo || undefined };
+    const entry: PjpEntry = { id: nextPjpId(), salesId, outletId: o.id, routeId: route?.id, day, freq: form.freq, weeks: weeksFor(form.freq, Number(form.alt)), seq: Math.max(0, ...entries.filter((x) => x.day === day).map((x) => x.seq)) + 1, validFrom: form.validFrom || nextMonday(TODAY), validTo: form.validTo || undefined };
     setPjp((list) => [...list, entry]);
     if (o.salesId !== salesId) setOutlets((list) => list.map((x) => (x.id === o.id ? { ...x, salesId, routeId: route?.id } : x)));
     markChanged([salesId]);
-    toast({ tone: "success", title: "Outlet ditambahkan ke PJP", desc: `${o.name} · ${days.map((d) => DAYS[d]).join(" & ")} · ${form.freq} · berlaku mulai ${fmtDate(entry.validFrom)}` });
-    capacityWarn(Math.max(...entry.weeks.flatMap((w) => days.map((d) => matrix[w - 1][d] + 1))), s.name, days.map((d) => DAYS[d]).join(" & "));
+    toast({ tone: "success", title: "Outlet ditambahkan ke PJP", desc: `${o.name} · ${DAYS[day]} · ${form.freq} · berlaku mulai ${fmtDate(entry.validFrom)}` });
+    capacityWarn(Math.max(...entry.weeks.map((w) => matrix[w - 1][day] + 1)), s.name, DAYS[day]);
     const wk = weekOf(entry.validFrom);
     if (wk && week !== "all" && wk > week) setWeek(wk);
     setAddOpen(false);
@@ -235,7 +218,7 @@ export function PjpPage() {
     const route = c?.routeId ? routeMap.get(c.routeId) : undefined;
     const day = route?.salesId === salesId && route.day !== undefined ? route.day : matrix[0].reduce((m, _, d) => (matrix.reduce((a, w) => a + w[d], 0) < matrix.reduce((a, w) => a + w[m], 0) ? d : m), 0);
     if (o && o.salesId !== salesId) setSalesId(o.salesId);
-    setForm({ outletId: c?.id ?? "", day: String(day), freq: freqOf(c, settings), alt: "0", validFrom: nextMonday(TODAY), validTo: "" });
+    setForm({ outletId: c?.id ?? "", day: String(day), freq: settings.defaultFreq, alt: "0", validFrom: nextMonday(TODAY), validTo: "" });
     setAddOpen(true);
   };
   const removeEntry = (id: string) => {
@@ -268,17 +251,16 @@ export function PjpPage() {
     // detail format: Tambah "Rabu · F2 (M1, M3)", Ubah hari "Senin → Kamis"
     const parts = r.kind === "Ubah hari" ? r.detail.split("→").map((x) => x.trim()) : [r.detail.split("·")[0]?.trim()];
     const toIdx = DAYS.findIndex((d) => d === parts[parts.length - 1]);
-    const fromIdx = DAYS.findIndex((d) => d === parts[0]);
     if (r.kind === "Ubah hari") {
-      if (existing && toIdx >= 0) setPjp((list) => list.map((x) => (x.id === existing.id ? { ...x, days: x.days.map((d) => (d === fromIdx || x.days.length === 1 ? toIdx : d)).sort((a, b) => a - b) } : x)));
+      if (existing && toIdx >= 0) setPjp((list) => list.map((x) => (x.id === existing.id ? { ...x, day: toIdx } : x)));
       markChanged([r.salesId]);
       return;
     }
     if (!existing) {
       const o = outletMap.get(r.outletId);
-      const freq = freqOf(o, settings);
+      const freq = settings.defaultFreq;
       const day = toIdx >= 0 ? toIdx : 0;
-      setPjp((list) => [...list, { id: nextPjpId(), salesId: r.salesId, outletId: r.outletId, routeId: o?.routeId, days: daysFor(freq, day), freq, weeks: weeksFor(freq, 0), seq: 99, validFrom: nextMonday(TODAY) }]);
+      setPjp((list) => [...list, { id: nextPjpId(), salesId: r.salesId, outletId: r.outletId, routeId: o?.routeId, day, freq, weeks: weeksFor(freq, 0), seq: 99, validFrom: nextMonday(TODAY) }]);
       markChanged([r.salesId]);
     }
   };
@@ -349,7 +331,7 @@ export function PjpPage() {
     <div className="space-y-6">
       <PageHeader
         title="PJP / Call Plan"
-        subtitle="Rencana kunjungan rotasi 4 minggu per salesman: rute (beat) per hari, banyak kunjungan per hari dalam urutan rute, frekuensi F1–F12. Follow-up prospek tampil sebagai extra call."
+        subtitle="Rencana kunjungan rotasi 4 minggu per salesman: rute (beat) per hari, banyak kunjungan per hari dalam urutan rute, frekuensi F1 / F2 / F4 (satu hari kunjungan per outlet). Follow-up prospek dan kunjungan tambahan tampil sebagai extra call."
         action={
           <>
             <Button variant="outline" onClick={() => toast({ tone: "info", title: "Peta rute tersedia di MileApp web (native)" })}>
@@ -679,7 +661,7 @@ export function PjpPage() {
                             <div className={cn("h-1.5 rounded-full", tone === "over" ? "bg-[#DC3545]" : tone === "warn" ? "bg-[#F5B400]" : "bg-[#198754]")} style={{ width: `${Math.min(100, (c.n / settings.pjpMaxCalls) * 100)}%` }} />
                           </div>
                           <p className="truncate text-[11px] text-muted-foreground">
-                            {isToday ? "Hari ini · " : ""}± {fmtDur(dayEstimate([...items.map((e) => outletMap.get(e.outletId)?.cls ?? "B"), ...c.ex.map(() => "B" as const)], settings))}
+                            {isToday ? "Hari ini · " : ""}± {fmtDur(dayEstimate(items.length + c.ex.length, settings))}
                             {(() => {
                               const rIds = [...new Set(items.map((e) => e.routeId).filter(Boolean))] as string[];
                               const main = rIds.map((id) => routeMap.get(id)).find((r) => r?.day === di);
@@ -733,9 +715,8 @@ export function PjpPage() {
                               >
                                 {canUpdate && !moved && <GripVertical className="h-3 w-3 shrink-0 opacity-40" />}
                                 <span className="w-4 shrink-0 text-right text-[10px] font-semibold opacity-70">{k + 1}</span>
-                                <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] text-[10px] font-bold", o.cls === "A" ? "bg-[#01496A] text-white" : o.cls === "B" ? "bg-[#6CD1FE] text-[#002638]" : "bg-[#E8E8E8] text-[#4F4F4F]")}>{o.cls}</span>
                                 <span className="min-w-0 flex-1 truncate">{o.name}</span>
-                                <span className={cn("shrink-0 text-[10px] font-semibold", e.freq === "F8" || e.freq === "F12" ? "text-[#E45C20]" : "opacity-70")}>{moved ? "Geser" : e.freq}</span>
+                                <span className="shrink-0 text-[10px] font-semibold opacity-70">{moved ? "Geser" : e.freq}</span>
                                 {canDelete && !moved && (
                                   <button onClick={() => setDelId(e.id)} className="hidden shrink-0 text-[#BF2130] group-hover:block" title="Hapus dari PJP">
                                     <X className="h-3 w-3" />
@@ -762,7 +743,7 @@ export function PjpPage() {
               <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
                 <span>Minggu {week}: {fmtDate(weekDates[week - 1][0])} – {fmtDate(weekDates[week - 1][1])}{cycle === 0 && week === CURRENT_WEEK ? " · minggu ini" : ""}</span>
                 {canUpdate && <span>Seret kartu untuk memindah hari (pola semua minggu ikut berubah), seret ke kartu lain untuk mengubah urutan, atau ke salesman lain untuk memindah outlet.</span>}
-                <span>Estimasi durasi = durasi standar per kelas (A {settings.classVisitMinutes.A} / B {settings.classVisitMinutes.B} / C {settings.classVisitMinutes.C} menit) + {settings.travelMinutes} menit perjalanan per kunjungan.</span>
+                <span>Estimasi durasi = {settings.visitMinutes} menit kunjungan + {settings.travelMinutes} menit perjalanan per kunjungan.</span>
               </p>
             </>
           )}
@@ -779,7 +760,6 @@ export function PjpPage() {
                     <TableHead className="w-12">No.</TableHead>
                     <TableHead>Outlet</TableHead>
                     <TableHead>Rute · urutan</TableHead>
-                    <TableHead>Kelas</TableHead>
                     <TableHead>Frekuensi</TableHead>
                     <TableHead>Hari kunjungan</TableHead>
                     <TableHead>Minggu</TableHead>
@@ -793,7 +773,6 @@ export function PjpPage() {
                     const o = outletMap.get(e.outletId);
                     if (!o) return null;
                     const route = e.routeId ? routeMap.get(e.routeId) : undefined;
-                    const need = FREQ_META[e.freq].perWeek;
                     return (
                       <TableRow key={e.id}>
                         <TableCell>{i + 1}</TableCell>
@@ -809,18 +788,15 @@ export function PjpPage() {
                             <span className="text-muted-foreground">#{Math.round(e.seq)}</span>
                             {canUpdate && (
                               <>
-                                <button onClick={() => move(e.id, -1, e.days[0])} className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Naikkan urutan">
+                                <button onClick={() => move(e.id, -1, e.day)} className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Naikkan urutan">
                                   <ArrowUp className="h-3 w-3" />
                                 </button>
-                                <button onClick={() => move(e.id, 1, e.days[0])} className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Turunkan urutan">
+                                <button onClick={() => move(e.id, 1, e.day)} className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title="Turunkan urutan">
                                   <ArrowDown className="h-3 w-3" />
                                 </button>
                               </>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <ClassBadge c={o.cls} />
                         </TableCell>
                         <TableCell>
                           {canUpdate ? (
@@ -839,22 +815,24 @@ export function PjpPage() {
                           ) : (
                             <span className="whitespace-nowrap text-xs">{FREQ_META[e.freq].label}</span>
                           )}
-                          {o.visitFreq && <span className="mt-0.5 block text-[10px] text-[#E45C20]">Key account</span>}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-0.5">
-                            {DAY_SHORT.map((d, di) => (
-                              <button
-                                key={d}
-                                disabled={!canUpdate}
-                                onClick={() => toggleDay(e, di)}
-                                className={cn("h-6 w-8 rounded-sm text-[10px] font-semibold", e.days.includes(di) ? "bg-primary text-white" : "bg-muted text-muted-foreground", canUpdate && "hover:ring-1 hover:ring-primary")}
-                              >
-                                {d}
-                              </button>
-                            ))}
-                          </div>
-                          {e.days.length !== need && <span className="text-[10px] text-[#BF2130]">Pilih {need} hari</span>}
+                          {canUpdate ? (
+                            <Select value={String(e.day)} onValueChange={(v) => moveToDay(e.id, e.day, Number(v))}>
+                              <SelectTrigger className="h-[31px] w-[110px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DAYS.map((d, di) => (
+                                  <SelectItem key={d} value={String(di)}>
+                                    {d}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="whitespace-nowrap text-xs">{DAYS[e.day]}</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {canUpdate && (e.freq === "F1" || e.freq === "F2") ? (
@@ -1027,7 +1005,7 @@ export function PjpPage() {
                 onValueChange={(v) => {
                   const o = outletMap.get(v);
                   const r = o?.routeId ? routeMap.get(o.routeId) : undefined;
-                  setForm((f) => ({ ...f, outletId: v, freq: freqOf(o, settings), day: r?.salesId === salesId && r.day !== undefined ? String(r.day) : f.day }));
+                  setForm((f) => ({ ...f, outletId: v, day: r?.salesId === salesId && r.day !== undefined ? String(r.day) : f.day }));
                 }}
               >
                 <SelectTrigger>
@@ -1036,7 +1014,7 @@ export function PjpPage() {
                 <SelectContent>
                   {candidates.slice(0, 150).map((o) => (
                     <SelectItem key={o.id} value={o.id}>
-                      {o.name} · Kelas {o.cls} · {o.code}
+                      {o.name} · {o.code}
                       {o.salesId !== salesId ? ` · ${salesOf(o.salesId).name}` : ""}
                     </SelectItem>
                   ))}
@@ -1061,7 +1039,7 @@ export function PjpPage() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>{FREQ_META[form.freq].perWeek > 1 ? "Hari pertama" : "Hari"}</Label>
+                <Label>Hari</Label>
                 <Select value={form.day} onValueChange={(v) => setForm((f) => ({ ...f, day: v }))}>
                   <SelectTrigger>
                     <SelectValue />
@@ -1096,9 +1074,9 @@ export function PjpPage() {
               </div>
             </div>
             <p className="rounded-md bg-muted px-3 py-2 text-xs">
-              Jadwal: <b>{daysFor(form.freq, Number(form.day)).map((d) => DAYS[d]).join(" & ")}</b> · {weeksFor(form.freq, Number(form.alt)).map((w) => `M${w}`).join(", ")} = <b>{callsPerCycle({ weeks: weeksFor(form.freq, Number(form.alt)), days: daysFor(form.freq, Number(form.day)) })} call / 4 minggu</b>
+              Jadwal: <b>{DAYS[Number(form.day)]}</b> · {weeksFor(form.freq, Number(form.alt)).map((w) => `M${w}`).join(", ")} = <b>{callsPerCycle({ weeks: weeksFor(form.freq, Number(form.alt)) })} call / 4 minggu</b>
               {(() => {
-                const peak = Math.max(...weeksFor(form.freq, Number(form.alt)).flatMap((w) => daysFor(form.freq, Number(form.day)).map((d) => matrix[w - 1][d] + 1)));
+                const peak = Math.max(...weeksFor(form.freq, Number(form.alt)).map((w) => matrix[w - 1][Number(form.day)] + 1));
                 return peak > settings.pjpCallTarget ? <span className="mt-1 block text-[#6B5000]">Hari terpilih menjadi {peak} call (target {settings.pjpCallTarget}{peak > settings.pjpMaxCalls ? `, melebihi maks ${settings.pjpMaxCalls}` : ""}).</span> : null;
               })()}
             </p>
@@ -1113,7 +1091,7 @@ export function PjpPage() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Default frekuensi dari Pengaturan: kelas A = {settings.classFreq.A}, B = {settings.classFreq.B}, C = {settings.classFreq.C}; belum pernah beli = {settings.belumBeliFreq}. F8 / F12 dipilih per outlet (key account). Angka final ditetapkan UP.
+              Default frekuensi dari Pengaturan: {FREQ_META[settings.defaultFreq].label}; ubah bila perlu. {FREQ_HINT}
             </p>
           </div>
           <DialogFooter>

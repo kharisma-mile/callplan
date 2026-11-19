@@ -86,9 +86,8 @@ export interface ModuleUser {
 }
 
 export type CustomerStatus = "baru" | "lama_beli" | "lama_belum";
-export type OutletClass = "A" | "B" | "C";
-/** Visits per 4-week cycle: F1 = 1x, F2 = every 2 weeks, F4 = weekly, F8 = 2x/week, F12 = 3x/week. */
-export type Frequency = "F1" | "F2" | "F4" | "F8" | "F12";
+/** Visits per 4-week cycle (one visit day): F1 = 1x, F2 = every 2 weeks, F4 = weekly. More than 1x/week = F4 + extra call. */
+export type Frequency = "F1" | "F2" | "F4";
 
 export interface Outlet {
   id: string;
@@ -101,7 +100,6 @@ export interface Outlet {
   branchId: string;
   salesId: string;
   status: CustomerStatus;
-  cls: OutletClass;
   segment: string;
   creditLimit: number;
   outstanding: number;
@@ -119,8 +117,6 @@ export interface Outlet {
   routeId?: string;
   /** Visit order within the route (1 = first stop). */
   routeSeq?: number;
-  /** Per-outlet frequency override (e.g. key accounts F8 / F12); empty = class default from Pengaturan. */
-  visitFreq?: Frequency;
   source: "odoo" | "import" | "noo" | "manual";
 }
 
@@ -139,14 +135,14 @@ export interface Product {
   active?: boolean;
 }
 
-/** One outlet in a salesman's PJP. Stored as frequency + week pattern + visit days; calls per cycle = weeks x days. */
+/** One outlet in a salesman's PJP. Stored as frequency + week pattern + one visit day; calls per cycle = weeks. */
 export interface PjpEntry {
   id: string;
   salesId: string;
   outletId: string;
   routeId?: string;
-  /** Visit weekdays, 0 = Senin .. 5 = Sabtu (F8: 2 days, F12: 3 days, otherwise 1). */
-  days: number[];
+  /** Visit weekday, 0 = Senin .. 5 = Sabtu (exactly one day per entry). */
+  day: number;
   freq: Frequency;
   weeks: number[]; // 1..4 within the 4-week cycle
   seq: number; // visit order within the day (route sequence)
@@ -357,7 +353,8 @@ export interface Settings {
   nooOrderBeforeFinance: boolean;
   minOrder: boolean;
   geofenceM: number;
-  classFreq: Record<OutletClass, Frequency>;
+  /** D-48: default frequency for new PJP entries / generate (frequency lives only on the PJP entry). */
+  defaultFreq: Frequency;
   /** PJP capacity: target calls per day (B2B plastics 10-15; FMCG typically 20-30). */
   pjpCallTarget: number;
   /** Hard warning above this number of calls per day. */
@@ -365,8 +362,8 @@ export interface Settings {
   /** HQ Direct Sales (key account channel) has its own capacity. */
   hqCallTarget: number;
   hqMaxCalls: number;
-  /** Standard visit minutes per outlet class + travel minutes between outlets (estimated day duration). */
-  classVisitMinutes: Record<OutletClass, number>;
+  /** Default visit minutes per outlet + travel minutes between outlets (estimated day duration). */
+  visitMinutes: number;
   travelMinutes: number;
   /** PJP cycle (weeks) and working days (0 = Senin .. 5 = Sabtu), with per-branch override. */
   cycleWeeks: number;
@@ -391,17 +388,15 @@ export interface Settings {
   changeApprover: "spv" | "spv_bm";
   changeRequestSlaHours: number;
   /** Auto-generate parameters. */
-  generateBalanceBy: "count" | "duration";
   generateKeepRoute: boolean;
   routeStartPoint: "branch" | "home";
   /** Daily call plan push reminder (HH:MM). */
   reminderTime: string;
-  belumBeliFreq: Frequency;
   /** Bypass: SPV / Admin edit PJP langsung tanpa approval (default off). */
   spvEditPjpDirect: boolean;
   /** Who approves a PJP before publish (permission approve_pjp). "regional" = Regional Manager (CD). */
   pjpApprover: "bm" | "spv" | "regional";
-  /** Module 02 assortment: segment x class without assortment offers all active products ("all") or nothing ("none"). */
+  /** Module 02 assortment: segment without assortment offers all active products ("all") or nothing ("none"). */
   assortmentFallback: "all" | "none";
   /** Module 03 plotting, Varian A: write the outlet owner back to Odoo (res.partner.user_id). */
   odooWriteBackSalesperson: boolean;
@@ -454,7 +449,7 @@ export interface Toast {
   tone?: "success" | "info" | "warning" | "danger";
 }
 
-/** Module 02: products offered per segment (channel) x outlet class; mustSell = checked on every visit / order. */
+/** Module 02: products offered per segment (channel); mustSell = checked on every visit / order. */
 export interface AssortmentItem {
   productId: string;
   mustSell: boolean;
@@ -462,12 +457,11 @@ export interface AssortmentItem {
 export interface Assortment {
   id: string;
   segment: string;
-  cls: OutletClass;
   items: AssortmentItem[];
   updatedBy?: string;
   updatedAt?: string;
 }
-/** Per-outlet exception on top of the segment x class assortment (key accounts). */
+/** Per-outlet exception on top of the segment assortment (key accounts). */
 export interface AssortmentException {
   id: string;
   outletId: string;

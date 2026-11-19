@@ -30,7 +30,6 @@ export function PlottingPage() {
   const { outlets, routes, pjp, pjpHeaders, scopeSalesIds, can, toast, ownershipLog, settings } = useApp();
   const [salesF, setSalesF] = useState<string>(scopeSalesIds[0] ?? "");
   const [routeF, setRouteF] = useState("all");
-  const [clsF, setClsF] = useState("all");
   const [segF, setSegF] = useState("all");
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -48,7 +47,6 @@ export function PlottingPage() {
   const base = salesF === UNPLOTTED ? unplotted : scoped.filter((o) => o.salesId === salesF);
   const rows = base.filter((o) =>
     (routeF === "all" || (routeF === "none" ? !o.routeId : o.routeId === routeF)) &&
-    (clsF === "all" || o.cls === clsF) &&
     (segF === "all" || o.segment === segF) &&
     (!q || `${o.name} ${o.code}`.toLowerCase().includes(q.toLowerCase())),
   );
@@ -146,13 +144,6 @@ export function PlottingPage() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari nama / kode outlet" className="pl-8" />
                   </div>
-                  <Select value={clsF} onValueChange={setClsF}>
-                    <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua kelas</SelectItem>
-                      {["A", "B", "C"].map((c) => <SelectItem key={c} value={c}>Kelas {c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
                   <Select value={segF} onValueChange={setSegF}>
                     <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -177,11 +168,10 @@ export function PlottingPage() {
                   <TableRow>
                     <TableHead className="w-10"><Checkbox checked={allChecked} onChange={toggleAll} title="Pilih semua" /></TableHead>
                     <TableHead>Outlet</TableHead>
-                    <TableHead>Kelas</TableHead>
                     <TableHead>Segmen</TableHead>
                     {salesF === UNPLOTTED && <TableHead>Salesman</TableHead>}
                     <TableHead>Rute</TableHead>
-                    <TableHead>Frekuensi</TableHead>
+                    <TableHead>Frekuensi PJP</TableHead>
                     <TableHead>Pesanan terakhir</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
@@ -196,7 +186,6 @@ export function PlottingPage() {
                           <p className="font-medium">{o.name}</p>
                           <p className="font-mono text-xs text-muted-foreground">{o.code} · {o.city}</p>
                         </TableCell>
-                        <TableCell>{o.cls}</TableCell>
                         <TableCell className="text-sm">{o.segment}</TableCell>
                         {salesF === UNPLOTTED && <TableCell className="text-sm">{salesOf(o.salesId).name}</TableCell>}
                         <TableCell className="text-sm">{routes.find((r) => r.id === o.routeId)?.name ?? <Badge variant="orange">Tanpa rute</Badge>}</TableCell>

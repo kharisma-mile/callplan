@@ -35,7 +35,7 @@ import type {
 import { APPROVAL_META, ROLE_META, ROLE_ORDER, defaultPermissions } from "@/lib/rbac";
 import { buildSteps, checkOrder, orderTotal } from "@/lib/approval";
 import { nowStamp, rupiah } from "@/lib/format";
-import { daysFor, weeksFor } from "@/data/pjp-engine";
+import { weeksFor } from "@/data/pjp-engine";
 
 const PREFIX: Record<ApprovalType, string> = {
   discount: "APV-DSK",
@@ -73,7 +73,7 @@ function nooDetails(opp: Opportunity) {
     { label: "Pemilik", value: opp.contact || "—" },
     { label: "Alamat + GPS", value: `${opp.city} · -7.2575, 112.7521 (check-in Mile Field)` },
     { label: "Dokumen", value: "Foto toko, KTP (NPWP: non-PKP)" },
-    { label: "Kanal / kelas usulan", value: "Horeka · C" },
+    { label: "Segmen usulan", value: "Horeka" },
     { label: "Limit diminta", value: rupiah(15_000_000) + " · TOP 14 hari" },
   ];
 }
@@ -93,7 +93,6 @@ function nooOutletFor(opp: Opportunity, into: Outlet[] = M.OUTLETS): Outlet {
     branchId: s.branchId,
     salesId: s.id,
     status: "baru",
-    cls: "C",
     segment: "Horeka",
     creditLimit: 0,
     outstanding: 0,
@@ -194,7 +193,7 @@ function seedApprovals(orders: Order[], opps: Opportunity[], settings: Settings)
   };
   disc(sby1[0].id, 4, "Kompetitor menawarkan harga lebih rendah", "2026-11-17 09:05", 1);
   disc(sby1[2].id, 4.5, "Pembelian volume 50 karton", "2026-11-16 15:20", 0);
-  disc(sby2[0].id, 8, "Program akhir tahun outlet kelas A", "2026-11-16 13:10", 0);
+  disc(sby2[0].id, 8, "Program akhir tahun outlet key account", "2026-11-16 13:10", 0);
   disc(jkt[1].id, 12, "Tender kemasan restoran (6 bulan)", "2026-11-15 10:30", 0);
 
   // special order (2 steps)
@@ -396,7 +395,7 @@ interface Actions {
   setAssortmentExceptions: (fn: (a: AssortmentException[]) => AssortmentException[]) => void;
   /** Module 03 plotting: move outlets to another salesman (PJP entries move as Draft, open pipeline follows). */
   reassignOutlets: (inp: ReassignInput) => { moved: number; pjpMoved: number; oppsMoved: number };
-  /** Module 02: products offered to an outlet (segment x class assortment + exceptions). */
+  /** Module 02: products offered to an outlet (segment assortment + exceptions). */
   assortmentFor: (outlet: Outlet) => { items: { productId: string; mustSell: boolean; source: "assortment" | "include" | "fallback" }[]; fallback: boolean };
 }
 
@@ -826,12 +825,12 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
     setPjp((list) => {
       const old = list.filter((e) => movingIds.has(e.outletId));
       const keep = list.filter((e) => !movingIds.has(e.outletId));
-      const maxSeq = (day: number) => Math.max(0, ...keep.filter((e) => e.salesId === inp.toSalesId && e.days.includes(day)).map((e) => e.seq));
+      const maxSeq = (day: number) => Math.max(0, ...keep.filter((e) => e.salesId === inp.toSalesId && e.day === day).map((e) => e.seq));
       const added = moving.map((o, i) => {
         const prev = old.find((e) => e.outletId === o.id);
-        const freq = prev?.freq ?? o.visitFreq ?? settings.classFreq[o.cls];
-        const day = route?.day ?? prev?.days[0] ?? 0;
-        return { id: `PJ-R${Date.now()}-${i}`, salesId: inp.toSalesId, outletId: o.id, routeId: inp.toRouteId, days: daysFor(freq, day), freq, weeks: prev?.weeks ?? weeksFor(freq, i), seq: maxSeq(day) + 1 + i, validFrom: inp.effective };
+        const freq = prev?.freq ?? settings.defaultFreq;
+        const day = route?.day ?? prev?.day ?? 0;
+        return { id: `PJ-R${Date.now()}-${i}`, salesId: inp.toSalesId, outletId: o.id, routeId: inp.toRouteId, day, freq, weeks: prev?.weeks ?? weeksFor(freq, i), seq: maxSeq(day) + 1 + i, validFrom: inp.effective };
       });
       return [...keep, ...added];
     });
@@ -852,7 +851,7 @@ export function AppProvider({ children, initialUserId }: { children: ReactNode; 
   };
 
   const assortmentFor = (o: Outlet) => {
-    const base = assortments.find((a) => a.segment === o.segment && a.cls === o.cls);
+    const base = assortments.find((a) => a.segment === o.segment);
     const ex = assortmentExceptions.filter((e) => e.outletId === o.id);
     const excluded = new Set(ex.filter((e) => e.kind === "exclude").map((e) => e.productId));
     const fallback = !base;

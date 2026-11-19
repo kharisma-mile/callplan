@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ClassBadge, CustomerBadge, OrderBadge } from "@/components/status-badge";
+import { CustomerBadge, OrderBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { useApp, branchOf, salesOf } from "@/store/app-store";
 import { BRANCHES, CUSTOMER_STATUS_LABEL, PRICE_GROUPS, SALESMEN, nextOutletSeq } from "@/data/mock";
-import type { CustomerStatus, Frequency, Outlet, OutletClass, Variant } from "@/data/types";
+import type { CustomerStatus, Outlet, Variant } from "@/data/types";
 import { Checkbox } from "@/components/switch";
 import { fmtDate, pct, rupiah, rupiahShort } from "@/lib/format";
 import { orderTotal } from "@/lib/approval";
@@ -61,7 +61,6 @@ const blank = (salesId: string): Outlet => {
     branchId: s.branchId,
     salesId,
     status: "baru",
-    cls: "C",
     segment: "Toko Kemasan",
     creditLimit: 0,
     outstanding: 0,
@@ -79,7 +78,6 @@ export function OutletsPage() {
   const { outlets, setOutlets, setPjp, inScope, scopeSalesIds, can, toast, user, orders, settings, approvals, pjp, routes, roleMeta, addAudit } = useApp();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | CustomerStatus>("all");
-  const [cls, setCls] = useState<"all" | OutletClass>("all");
   const [branch, setBranch] = useState("all");
   const [detail, setDetail] = useState<Outlet | null>(null);
   const [edit, setEdit] = useState<Outlet | null>(null);
@@ -109,15 +107,14 @@ export function OutletsPage() {
           inScope(o.salesId) &&
           (showInactive || o.active) &&
           (status === "all" || o.status === status) &&
-          (cls === "all" || o.cls === cls) &&
           (branch === "all" || o.branchId === branch) &&
           (q === "" || `${o.name} ${o.code} ${o.owner}`.toLowerCase().includes(q.toLowerCase()))
       ),
-    [outlets, inScope, status, cls, branch, q, showInactive]
+    [outlets, inScope, status, branch, q, showInactive]
   );
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [status, cls, branch, q, showInactive]);
+  useEffect(() => setPage(1), [status, branch, q, showInactive]);
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const curPage = Math.min(page, pageCount);
   const offset = (curPage - 1) * PAGE_SIZE;
@@ -166,11 +163,11 @@ export function OutletsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Outlet / Pelanggan"
-        subtitle="Master outlet dengan status pembelian, kelas, limit kredit dan ringkasan piutang."
+        subtitle="Master outlet dengan status pembelian, limit kredit dan ringkasan piutang."
         action={
           <>
             {can("import_outlet") && (
-              <Button variant="outline" onClick={() => toast({ tone: "info", title: "Import outlet", desc: settings.variant === "A" ? "Di Varian A master pelanggan disinkronkan dari Odoo; import hanya untuk data tambahan (kelas, sales)." : "Buka menu Import / Export Excel untuk import massal." })}>
+              <Button variant="outline" onClick={() => toast({ tone: "info", title: "Import outlet", desc: settings.variant === "A" ? "Di Varian A master pelanggan disinkronkan dari Odoo; import hanya untuk data tambahan (segmen, sales)." : "Buka menu Import / Export Excel untuk import massal." })}>
                 <Upload /> Import
               </Button>
             )}
@@ -221,17 +218,6 @@ export function OutletsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={cls} onValueChange={(v) => setCls(v as typeof cls)}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua kelas</SelectItem>
-              <SelectItem value="A">Kelas A</SelectItem>
-              <SelectItem value="B">Kelas B</SelectItem>
-              <SelectItem value="C">Kelas C</SelectItem>
-            </SelectContent>
-          </Select>
           {showBranch && (
             <Select value={branch} onValueChange={setBranch}>
               <SelectTrigger className="w-[200px]">
@@ -264,7 +250,6 @@ export function OutletsPage() {
               <TableHead className="w-12">No.</TableHead>
               <TableHead>Outlet</TableHead>
               <TableHead>Sales</TableHead>
-              <TableHead>Kelas</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Limit kredit</TableHead>
               <TableHead className="text-right">Piutang</TableHead>
@@ -286,9 +271,6 @@ export function OutletsPage() {
                 <TableCell>
                   <p>{salesOf(o.salesId).name}</p>
                   <p className="text-xs text-muted-foreground">{branchOf(o.branchId).name}</p>
-                </TableCell>
-                <TableCell>
-                  <ClassBadge c={o.cls} />
                 </TableCell>
                 <TableCell>
                   <DerivedStatus s={o.status} variant={settings.variant} />
@@ -384,7 +366,6 @@ export function OutletsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {!detail.active && <Badge variant="neutral">Nonaktif</Badge>}
-                    <ClassBadge c={detail.cls} />
                     <DerivedStatus s={detail.status} variant={settings.variant} />
                   </div>
                 </div>
@@ -499,7 +480,7 @@ export function OutletsPage() {
               <div className="mile-scroll grid max-h-[70vh] grid-cols-2 gap-4 overflow-y-auto p-4">
                 {lockOdoo && (
                   <p className="col-span-2 rounded-md border border-[#9FE1FE] bg-[#E6F7FF] p-2 text-xs text-[#01496A]">
-                    Varian A: field bertanda <b>Odoo</b> dikelola di Odoo (res.partner) dan read-only di modul. Yang dapat diubah di modul: kelas, segmen, rute, sales, GPS pin.
+                    Varian A: field bertanda <b>Odoo</b> dikelola di Odoo (res.partner) dan read-only di modul. Yang dapat diubah di modul: segmen, rute, sales, GPS pin.
                   </p>
                 )}
                 <div className="col-span-2 flex items-center gap-2 text-sm">
@@ -587,37 +568,6 @@ export function OutletsPage() {
                             {r.code} · {r.name}
                           </SelectItem>
                         ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Kelas</Label>
-                  <Select value={edit.cls} onValueChange={(v) => setEdit({ ...edit, cls: v as OutletClass })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(["A", "B", "C"] as const).map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c} ({settings.classFreq[c]})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Frekuensi kunjungan</Label>
-                  <Select value={edit.visitFreq ?? "default"} onValueChange={(v) => setEdit({ ...edit, visitFreq: v === "default" ? undefined : (v as Frequency) })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Ikuti kelas ({settings.classFreq[edit.cls]})</SelectItem>
-                      <SelectItem value="F8">F8 · 2×/minggu (key account)</SelectItem>
-                      <SelectItem value="F12">F12 · 3×/minggu (key account)</SelectItem>
-                      <SelectItem value="F4">F4 · tiap minggu</SelectItem>
-                      <SelectItem value="F2">F2 · 2 minggu sekali</SelectItem>
-                      <SelectItem value="F1">F1 · 1×/4 minggu</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -12,7 +12,6 @@ import type {
   OppType,
   Order,
   Outlet,
-  OutletClass,
   PjpEntry,
   PjpChangeRequest,
   PriceList,
@@ -188,6 +187,8 @@ SALESMEN.forEach((s) => {
 
 /* ---------- outlets: ~60-120 per salesman, grouped in beats with a route sequence ---------- */
 export const OUTLETS: Outlet[] = [];
+/** Seed only: the frequency the SPV picked per PJP entry (D-48: frequency lives on the PJP entry, not the outlet). */
+const SEED_FREQ = new Map<string, Frequency>();
 let outletSeq = 1;
 for (const s of SALESMEN) {
   const b = BRANCHES.find((x) => x.id === s.branchId)!;
@@ -203,12 +204,12 @@ for (const s of SALESMEN) {
     return { lat: geo.lat + Math.sin(ang) * rad, lng: geo.lng + Math.cos(ang) * rad, dir, n: 0 };
   });
   for (let i = 0; i < count; i++) {
+    // Outlet size (seed only, not stored): drives credit limit, price group and the seeded PJP frequency.
     const r0 = rnd();
-    const cls: OutletClass = isHQ ? (r0 < 0.5 ? "A" : r0 < 0.85 ? "B" : "C") : r0 < 0.36 ? "A" : r0 < 0.76 ? "B" : "C";
+    const size = isHQ ? (r0 < 0.5 ? 3 : r0 < 0.85 ? 2 : 1) : r0 < 0.36 ? 3 : r0 < 0.76 ? 2 : 1;
     const r = rnd();
     const status: CustomerStatus = r < 0.06 ? "baru" : r < 0.86 ? "lama_beli" : "lama_belum";
-    const visitFreq: Frequency | undefined = cls === "A" && status === "lama_beli" ? (rnd() < 0.04 ? "F12" : rnd() < (isHQ ? 0.45 : 0.25) ? "F8" : undefined) : undefined;
-    const creditLimit = status === "baru" ? 0 : cls === "A" ? between(15, 40) * 10_000_000 : cls === "B" ? between(5, 15) * 10_000_000 : between(1, 5) * 10_000_000;
+    const creditLimit = status === "baru" ? 0 : size === 3 ? between(15, 40) * 10_000_000 : size === 2 ? between(5, 15) * 10_000_000 : between(1, 5) * 10_000_000;
     const outstanding = status === "lama_beli" ? Math.round(creditLimit * (0.2 + rnd() * 0.75)) : 0;
     const hasOverdue = outstanding > 0 && rnd() < 0.3;
     const overdueDays = hasOverdue ? between(5, 52) : 0;
@@ -229,7 +230,6 @@ for (const s of SALESMEN) {
       branchId: s.branchId,
       salesId: s.id,
       status,
-      cls,
       segment: pick(SEGMENTS),
       creditLimit,
       outstanding,
@@ -248,13 +248,13 @@ for (const s of SALESMEN) {
             },
       npwp: rnd() < 0.45 ? `0${between(1, 9)}.${between(100, 999)}.${between(100, 999)}.${between(1, 9)}-${between(100, 999)}.000` : undefined,
       pkp: false,
-      priceGroup: cls === "A" ? "Grosir" : pick(["Retail", "Retail", "Grosir", "Horeka / Industri"]),
+      priceGroup: size === 3 ? "Grosir" : pick(["Retail", "Retail", "Grosir", "Horeka / Industri"]),
       routeId: `R-${s.code}-${d + 1}`,
       routeSeq: beat.n,
-      visitFreq,
       source: status === "baru" ? "noo" : "odoo",
     });
     const last = OUTLETS[OUTLETS.length - 1];
+    SEED_FREQ.set(last.id, status === "lama_belum" ? "F2" : size === 3 ? "F4" : size === 2 ? "F2" : "F1");
     last.pkp = !!last.npwp && rnd() < 0.6;
     outletSeq++;
   }
@@ -265,9 +265,6 @@ export function nextOutletSeq() {
 
 /* ---------- PJP ---------- */
 export { weeksFor } from "./pjp-engine";
-/** Default class → frequency mapping (also in DEFAULT_SETTINGS). */
-const SEED_CLASS_FREQ: Record<OutletClass, Frequency> = { A: "F4", B: "F2", C: "F1" };
-export const seedFreqOf = (o: Outlet): Frequency => o.visitFreq ?? (o.status === "lama_belum" ? "F2" : SEED_CLASS_FREQ[o.cls]);
 export const PJP: PjpEntry[] = [];
 let pjpSeq = 1;
 export function nextPjpId() {
@@ -285,7 +282,7 @@ for (const s of SALESMEN) {
       salesId: s.id,
       outlets: outlets.filter((o) => !UNCOVERED_SEED.has(o.id)),
       routes: ROUTES,
-      freqOf: seedFreqOf,
+      freqOf: (o) => SEED_FREQ.get(o.id) ?? "F2",
       target: 12,
       validFrom: "2026-10-05",
       nextId: nextPjpId,
@@ -461,13 +458,12 @@ export const DEFAULT_SETTINGS: Settings = {
   nooOrderBeforeFinance: false,
   minOrder: false,
   geofenceM: 100,
-  classFreq: { A: "F4", B: "F2", C: "F1" },
-  belumBeliFreq: "F2",
+  defaultFreq: "F2",
   pjpCallTarget: 12,
   pjpMaxCalls: 15,
   hqCallTarget: 8,
   hqMaxCalls: 10,
-  classVisitMinutes: { A: 35, B: 25, C: 20 },
+  visitMinutes: 25,
   travelMinutes: 15,
   cycleWeeks: 4,
   workDays: [0, 1, 2, 3, 4, 5],
@@ -486,7 +482,6 @@ export const DEFAULT_SETTINGS: Settings = {
   lockAfterPublish: true,
   changeApprover: "spv",
   changeRequestSlaHours: 24,
-  generateBalanceBy: "count",
   generateKeepRoute: true,
   routeStartPoint: "branch",
   reminderTime: "07:00",
@@ -617,7 +612,7 @@ export const SYNC_ERRORS: SyncError[] = [
   { id: "E3", domain: "so", ref: "SO-JKT-202611-0118", message: "Timeout 30 detik saat memanggil Odoo API (sale.order create)", at: "2026-11-17 10:52", resolved: false },
 ];
 export const IMPORT_TEMPLATES = [
-  { key: "customer", name: "Pelanggan", desc: "Kode, nama, alamat, cabang, sales, kelas, status beli" },
+  { key: "customer", name: "Pelanggan", desc: "Kode, nama, alamat, cabang, sales, segmen, status beli" },
   { key: "product", name: "Produk & UoM", desc: "SKU, nama, kategori, UoM, konversi" },
   { key: "pricelist", name: "Price list", desc: "SKU, UoM, harga, berlaku mulai" },
   { key: "receivable", name: "Piutang & limit kredit", desc: "Kode pelanggan, limit, saldo, jatuh tempo" },
@@ -660,32 +655,24 @@ export const PJP_REQUESTS: PjpChangeRequest[] = (() => {
   const team = SALESMEN.filter((s) => s.spvId === "SPV-SBY-1");
   const o0 = OUTLETS.filter((o) => o.salesId === team[0].id);
   const add = o0.find((o) => UNCOVERED_SEED.has(o.id)) ?? o0[o0.length - 1];
-  const e1 = PJP.find((e) => e.salesId === team[1].id && e.days.length === 1 && e.days[0] === 0) ?? PJP.find((e) => e.salesId === team[1].id)!;
+  const e1 = PJP.find((e) => e.salesId === team[1].id && e.day === 0) ?? PJP.find((e) => e.salesId === team[1].id)!;
   const e3 = PJP.find((e) => e.salesId === team[0].id && e.freq === "F1")!;
   return [
     { id: "PCR1", salesId: team[0].id, outletId: add.id, kind: "Tambah", detail: "Rabu · F2 (M1, M3)", reason: "Outlet mulai order rutin", requestedBy: team[0].name, at: "2026-11-17 07:40", status: "pending" },
-    { id: "PCR2", salesId: team[1].id, outletId: e1.outletId, kind: "Ubah hari", detail: `${DAYS[e1.days[0]]} → Kamis`, reason: "Pemilik hanya ada di toko hari Kamis", requestedBy: team[1].name, at: "2026-11-16 16:05", status: "pending" },
+    { id: "PCR2", salesId: team[1].id, outletId: e1.outletId, kind: "Ubah hari", detail: `${DAYS[e1.day]} → Kamis`, reason: "Pemilik hanya ada di toko hari Kamis", requestedBy: team[1].name, at: "2026-11-16 16:05", status: "pending" },
     { id: "PCR3", salesId: team[0].id, outletId: e3.outletId, kind: "Hapus", detail: "Keluar dari PJP mulai minggu depan", reason: "Toko tutup permanen", requestedBy: team[0].name, at: "2026-11-14 10:20", status: "approved", decidedBy: "Dewi Lestari", decisionReason: "Sudah dicek" },
   ];
 })();
 
-/* ---------- assortment per segment x class (module 02) ---------- */
+/* ---------- assortment per segment (module 02) ---------- */
 export const SEGMENT_LIST = ["Grosir Plastik", "Toko Kemasan", "Industri F&B", "Horeka", "Agen / Sub-distributor", "Toko Kelontong"];
-const A_ = (segment: string, cls: "A" | "B" | "C", items: [string, boolean][]): Assortment => ({ id: `AS-${segment.slice(0, 3)}-${cls}`.replace(/\s/g, ""), segment, cls, items: items.map(([productId, mustSell]) => ({ productId, mustSell })), updatedBy: "Admin Sistem", updatedAt: "2026-11-10 09:00" });
+const A_ = (segment: string, items: [string, boolean][]): Assortment => ({ id: `AS-${segment.slice(0, 3)}`.replace(/\s/g, ""), segment, items: items.map(([productId, mustSell]) => ({ productId, mustSell })), updatedBy: "Admin Sistem", updatedAt: "2026-11-10 09:00" });
 export const ASSORTMENTS: Assortment[] = [
-  A_("Grosir Plastik", "A", [["P01", true], ["P02", true], ["P06", true], ["P11", false], ["P12", false], ["P07", false], ["P03", false]]),
-  A_("Grosir Plastik", "B", [["P01", true], ["P02", true], ["P11", false], ["P07", false]]),
-  A_("Grosir Plastik", "C", [["P01", true], ["P02", false], ["P07", false]]),
-  A_("Toko Kemasan", "A", [["P03", true], ["P04", true], ["P08", true], ["P09", false], ["P01", false], ["P06", false]]),
-  A_("Toko Kemasan", "B", [["P03", true], ["P04", true], ["P09", false], ["P08", false]]),
-  A_("Toko Kemasan", "C", [["P03", true], ["P04", false], ["P09", false]]),
-  A_("Industri F&B", "A", [["P05", true], ["P12", true], ["P06", false], ["P10", false], ["P08", false]]),
-  A_("Industri F&B", "B", [["P05", true], ["P12", false], ["P06", false]]),
-  A_("Horeka", "A", [["P04", true], ["P03", true], ["P09", false], ["P08", false]]),
-  A_("Horeka", "B", [["P04", true], ["P03", false], ["P09", false]]),
-  A_("Agen / Sub-distributor", "A", [["P01", true], ["P02", true], ["P03", true], ["P04", false], ["P11", false], ["P12", false]]),
-  A_("Toko Kelontong", "B", [["P01", true], ["P07", false], ["P09", false]]),
-  A_("Toko Kelontong", "C", [["P01", true], ["P07", false]]),
+  A_("Grosir Plastik", [["P01", true], ["P02", true], ["P06", true], ["P11", false], ["P12", false], ["P07", false], ["P03", false]]),
+  A_("Toko Kemasan", [["P03", true], ["P04", true], ["P08", true], ["P09", false], ["P01", false], ["P06", false]]),
+  A_("Industri F&B", [["P05", true], ["P12", true], ["P06", false], ["P10", false], ["P08", false]]),
+  A_("Horeka", [["P04", true], ["P03", true], ["P09", false], ["P08", false]]),
+  A_("Agen / Sub-distributor", [["P01", true], ["P02", true], ["P03", true], ["P04", false], ["P11", false], ["P12", false]]),
 ];
 export const ASSORTMENT_EXCEPTIONS: AssortmentException[] = [];
 export const OWNERSHIP_LOG: OwnershipLog[] = [];

@@ -36,7 +36,7 @@ const REPORTS: { key: ReportKey; label: string; desc: string }[] = [
   { key: "pipeline_report", label: "Laporan Pipeline", desc: "Peluang per tahap, nilai estimasi, follow-up dan alasan batal." },
   { key: "survey_report", label: "Laporan Survey Kompetitor", desc: "Entri survey kompetitor dari kunjungan efektif (harga, merek, produk)." },
   { key: "target_achievement_report", label: "Laporan Pencapaian Target", desc: "Target vs aktual per salesman per bulan." },
-  { key: "outlet_report", label: "Laporan Outlet", desc: "Master outlet dengan status beli, kelas, limit dan piutang." },
+  { key: "outlet_report", label: "Laporan Outlet", desc: "Master outlet dengan segmen, status beli, limit dan piutang." },
 ];
 
 const MONTHS = ["2026-10", "2026-11", "2026-12"];
@@ -190,9 +190,9 @@ export function ReportsPage() {
       case "outlet_report": {
         const list = outlets.filter((o) => pickSales(o.salesId));
         return {
-          head: ["No.", "Kode", "Outlet", "Sales", "Kelas", "Status", "Limit kredit", "Piutang"],
+          head: ["No.", "Kode", "Outlet", "Sales", "Segmen", "Status", "Limit kredit", "Piutang"],
           right: [6, 7],
-          rows: list.map((o, i) => [i + 1, o.code, `${o.name}${o.active ? "" : " (nonaktif)"}`, salesOf(o.salesId).name, o.cls, <CustomerBadge key="c" s={o.status} />, rupiah(o.creditLimit), rupiah(o.outstanding)]),
+          rows: list.map((o, i) => [i + 1, o.code, `${o.name}${o.active ? "" : " (nonaktif)"}`, salesOf(o.salesId).name, o.segment, <CustomerBadge key="c" s={o.status} />, rupiah(o.creditLimit), rupiah(o.outstanding)]),
         };
       }
       default:

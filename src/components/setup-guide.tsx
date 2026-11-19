@@ -13,14 +13,14 @@ export function SetupGuide({ onNavigate }: { onNavigate: (k: string) => void }) 
   const scopeSales = SALESMEN.filter((s) => scopeSalesIds.includes(s.id));
   const noRoute = scopeSales.filter((s) => !routes.some((r) => r.active && r.salesId === s.id)).length;
   const unplotted = outlets.filter((o) => o.active && scopeSalesIds.includes(o.salesId) && !o.routeId).length;
-  const missingAssort = SEGMENT_LIST.length * 3 - assortments.length;
+  const missingAssort = SEGMENT_LIST.filter((seg) => !assortments.some((a) => a.segment === seg)).length;
   const notPublished = pjpHeaders.filter((h) => scopeSalesIds.includes(h.salesId) && h.status !== "Dipublikasikan").length;
   const published = scopeSales.length - notPublished;
 
   const steps = [
     { key: "territory", perm: ["view_any_route", "view_any_sales_team"], title: "Territory & Tim Sales", desc: "Cabang, SPV → salesman, rute / beat per hari", todo: noRoute, todoText: `${noRoute} salesman belum punya rute`, okText: `${routes.filter((r) => r.active).length} rute aktif` },
     { key: "plotting", perm: ["view_any_outlet_assignment"], title: "Plotting Pelanggan", desc: "Outlet → salesman pemilik + rute", todo: unplotted, todoText: `${unplotted} outlet belum diplot ke rute`, okText: "Semua outlet sudah diplot" },
-    { key: "assortment", perm: ["view_any_assortment", "view_any_price_list"], title: "Produk, Price List & Assortment", desc: "Harga per price group, produk per segmen × kelas", todo: missingAssort, todoText: `${missingAssort} segmen × kelas tanpa assortment`, okText: `${priceLists.filter((p) => p.active).length} price list aktif` },
+    { key: "assortment", perm: ["view_any_assortment", "view_any_price_list"], title: "Produk, Price List & Assortment", desc: "Harga per price group, produk per segmen", todo: missingAssort, todoText: `${missingAssort} segmen tanpa assortment`, okText: `${priceLists.filter((p) => p.active).length} price list aktif` },
     { key: "pjp", perm: ["view_any_pjp"], title: "PJP / Call Plan", desc: "Generate → approval → publikasi", todo: notPublished, todoText: `${notPublished} salesman PJP belum dipublikasikan`, okText: "Semua PJP dipublikasikan" },
   ];
   const visible = steps.filter((s) => s.perm.some((p) => can(p)));

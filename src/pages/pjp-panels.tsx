@@ -8,10 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ClassBadge } from "@/components/status-badge";
 import { useApp, salesOf } from "@/store/app-store";
 import { BRANCH_GEO, DAYS, HOLIDAYS, SALESMEN, TODAY, addDays, cycleDate, cyclePos, cycleStart, nextPjpId, prevWorkday } from "@/data/mock";
-import { FREQS, FREQ_META, callsPerCycle, daysFor, generatePjp, haversineKm, isHoliday, isOn, loadMatrix, pathKm, simulateDay, validOn, weeksFor, type ExecLine } from "@/data/pjp-engine";
+import { FREQS, FREQ_META, callsPerCycle, generatePjp, haversineKm, isHoliday, isOn, loadMatrix, pathKm, simulateDay, validOn, weeksFor, type ExecLine } from "@/data/pjp-engine";
 import type { Frequency, Outlet, PjpEntry, PjpShift, Settings } from "@/data/types";
 import { fmtDate, nowStamp, pct } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -36,11 +35,8 @@ export const TONE_CLS: Record<CapTone, string> = {
   warn: "bg-[#FFF4D1] text-[#6B5000]",
   over: "bg-[#FAE5E7] text-[#68121A]",
 };
-export const freqOf = (o: Outlet | undefined, s: Settings): Frequency =>
-  !o ? "F2" : o.visitFreq ?? (o.status === "lama_belum" ? s.belumBeliFreq : s.classFreq[o.cls]);
-/** Estimated day minutes: standard visit minutes per class + travel between outlets. */
-export const dayEstimate = (classes: ("A" | "B" | "C")[], s: Settings) => classes.reduce((a, c) => a + s.classVisitMinutes[c] + s.travelMinutes, 0);
-export const avgVisitMinutes = (s: Settings) => Math.round((s.classVisitMinutes.A + s.classVisitMinutes.B + s.classVisitMinutes.C) / 3);
+/** Estimated day minutes: default visit minutes + travel between outlets, per call. */
+export const dayEstimate = (calls: number, s: Settings) => calls * (s.visitMinutes + s.travelMinutes);
 /** Capacity by channel: HQ Direct Sales (key accounts) vs branch sales. */
 export const withCapacity = (s: Settings, branchId?: string): Settings => (branchId === "HQ" ? { ...s, pjpCallTarget: s.hqCallTarget, pjpMaxCalls: s.hqMaxCalls } : s);
 export const workDaysFor = (s: Settings, branchId: string) => s.branchWorkDays[branchId] ?? s.workDays;
@@ -169,7 +165,6 @@ export function CoveragePanel({ salesId, onAdd, onPickSales }: { salesId: string
                 <TableRow>
                   <TableHead>Outlet</TableHead>
                   <TableHead>Salesman</TableHead>
-                  <TableHead>Usulan</TableHead>
                   <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
@@ -177,16 +172,10 @@ export function CoveragePanel({ salesId, onAdd, onPickSales }: { salesId: string
                 {rows.slice(0, 60).map((o) => (
                   <TableRow key={o.id}>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <ClassBadge c={o.cls} />
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{o.name}</p>
-                          <p className="text-xs text-muted-foreground">{o.code}</p>
-                        </div>
-                      </div>
+                      <p className="truncate font-medium">{o.name}</p>
+                      <p className="text-xs text-muted-foreground">{o.code}</p>
                     </TableCell>
                     <TableCell className="text-xs">{salesOf(o.salesId).name}</TableCell>
-                    <TableCell className="text-xs">{freqOf(o, settings)}</TableCell>
                     <TableCell>
                       {can("create_pjp") && (
                         <Button size="sm" variant="outline" onClick={() => onAdd(o)}>
@@ -231,7 +220,7 @@ export function CoveragePanel({ salesId, onAdd, onPickSales }: { salesId: string
           ].map(([label, mix]) => {
             const m = mix as { f: Frequency; n: number }[];
             const tot = m.reduce((a, x) => a + x.n, 0) || 1;
-            const COL: Record<Frequency, string> = { F1: "#C7C7C7", F2: "#6CD1FE", F4: "#02A8F3", F8: "#01496A", F12: "#E45C20" };
+            const COL: Record<Frequency, string> = { F1: "#C7C7C7", F2: "#6CD1FE", F4: "#02A8F3" };
             return (
               <div key={label as string} className="space-y-2">
                 <p className="text-sm font-semibold">{label as string}</p>
@@ -413,17 +402,15 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
     if (!open) return [];
     return ids.map((id) => {
       const list = outlets.filter((o) => o.salesId === id && o.active && o.status !== "baru");
-      const avg = avgVisitMinutes(settings);
       const gen = generatePjp({
         salesId: id,
         outlets: list,
         routes,
-        freqOf: (o) => freqOf(o, settings),
+        freqOf: () => settings.defaultFreq,
         target: scope === "one" ? target : withCapacity(settings, salesOf(id).branchId).pjpCallTarget,
         validFrom,
         nextId: () => "tmp",
         workDays: workDaysFor(settings, salesOf(id).branchId),
-        weightOf: settings.generateBalanceBy === "duration" ? (o) => settings.classVisitMinutes[o.cls] / avg : undefined,
         keepRoute: settings.generateKeepRoute,
       });
       const before = loadMatrix(pjp.filter((e) => e.salesId === id && validOn(e, validFrom))).flat();
@@ -455,9 +442,8 @@ export function GenerateDialog({ open, onOpenChange, salesId, validFrom, onAppli
         </DialogHeader>
         <div className="space-y-4 p-4">
           <p className="text-xs text-muted-foreground">
-            Dibentuk dari frekuensi outlet (kelas A = {settings.classFreq.A}, B = {settings.classFreq.B}, C = {settings.classFreq.C}; belum beli = {settings.belumBeliFreq}; override per outlet F8 / F12), hari rute (beat) dan urutan rute. F2 / F1 ditempatkan pada minggu
-            dengan beban terendah; bila hari rute melebihi target, outlet F1 / F2 digeser ke hari tetangga. Parameter dari Pengaturan: seimbangkan berdasarkan{" "}
-            <b>{settings.generateBalanceBy === "count" ? "jumlah call" : "durasi kunjungan"}</b>, {settings.generateKeepRoute ? "rute dipertahankan" : "rute diabaikan"}, hanya hari kerja cabang.
+            Semua outlet memakai frekuensi default dari Pengaturan (<b>{FREQ_META[settings.defaultFreq].label}</b>); ubah per entri setelah generate. Satu hari rute (beat) per outlet dan urutan rute. F2 / F1 ditempatkan pada minggu
+            dengan beban terendah; bila hari rute melebihi target, outlet F1 / F2 digeser ke hari tetangga. {settings.generateKeepRoute ? "Rute dipertahankan" : "Rute diabaikan"}, hanya hari kerja cabang.
           </p>
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
@@ -559,7 +545,7 @@ interface ImportRow {
   freq: string;
   weeks: string;
   error?: string;
-  apply?: { outletId: string; days: number[]; freq: Frequency; weeks: number[] };
+  apply?: { outletId: string; day: number; freq: Frequency; weeks: number[] };
 }
 export function ImportDialog({ open, onOpenChange, salesId, entries, validFrom }: { open: boolean; onOpenChange: (v: boolean) => void; salesId: string; entries: PjpEntry[]; validFrom: string }) {
   const { outlets, setPjp, toast, addAudit, setImportLogs, user, settings } = useApp();
@@ -574,17 +560,16 @@ export function ImportDialog({ open, onOpenChange, salesId, entries, validFrom }
     const r: ImportRow[] = [];
     let line = 2;
     const ok = (o: Outlet, day: number, f: Frequency, alt: number) => {
-      const days = daysFor(f, day);
       const weeks = weeksFor(f, alt);
-      r.push({ line: line++, code: o.code, name: o.name, day: days.map((d) => DAYS[d]).join(" & "), freq: f, weeks: weeks.map((w) => `M${w}`).join(","), apply: { outletId: o.id, days, freq: f, weeks } });
+      r.push({ line: line++, code: o.code, name: o.name, day: DAYS[day], freq: f, weeks: weeks.map((w) => `M${w}`).join(","), apply: { outletId: o.id, day, freq: f, weeks } });
     };
-    add.forEach((o, i) => ok(o, (i * 2) % 6, freqOf(o, settings), i));
-    change.forEach((o, i) => ok(o, (i + 3) % 6, i === 0 ? "F8" : freqOf(o, settings), i));
+    add.forEach((o, i) => ok(o, (i * 2) % 6, settings.defaultFreq, i));
+    change.forEach((o, i) => ok(o, (i + 3) % 6, i === 0 ? "F4" : settings.defaultFreq, i));
     r.push({ line: line++, code: `C-${s.branchId}-9999`, name: "—", day: "Senin", freq: "F2", weeks: "M1,M3", error: "Kode outlet tidak ditemukan" });
     r.push({ line: line++, code: other.code, name: other.name, day: "Selasa", freq: "F4", weeks: "M1-M4", error: "Outlet berada di cabang lain" });
     if (own[0]) r.push({ line: line++, code: own[0].code, name: own[0].name, day: "Minggu", freq: "F2", weeks: "M2,M4", error: "Hari harus Senin–Sabtu" });
-    if (own[1]) r.push({ line: line++, code: own[1].code, name: own[1].name, day: "Rabu", freq: "F3", weeks: "M1", error: "Frekuensi harus F1 / F2 / F4 / F8 / F12" });
-    if (own[2]) r.push({ line: line++, code: own[2].code, name: own[2].name, day: "Kamis", freq: "F8", weeks: "M1-M4", error: "F8 butuh 2 hari kunjungan per minggu" });
+    if (own[1]) r.push({ line: line++, code: own[1].code, name: own[1].name, day: "Rabu", freq: "F3", weeks: "M1", error: "Frekuensi harus F1 / F2 / F4" });
+    if (own[2]) r.push({ line: line++, code: own[2].code, name: own[2].name, day: "Senin & Kamis", freq: "F4", weeks: "M1-M4", error: "Satu baris hanya satu hari kunjungan; kunjungan ke-2 dalam seminggu dibuat sebagai extra call" });
     setRows(r.sort((a, b) => a.line - b.line));
   };
   const valid = rows?.filter((r) => r.apply) ?? [];
@@ -594,10 +579,10 @@ export function ImportDialog({ open, onOpenChange, salesId, entries, validFrom }
       for (const r of valid) {
         const a = r.apply!;
         const i = next.findIndex((e) => e.salesId === salesId && e.outletId === a.outletId && validOn(e, validFrom));
-        if (i >= 0) next[i] = { ...next[i], days: a.days, freq: a.freq, weeks: a.weeks };
+        if (i >= 0) next[i] = { ...next[i], day: a.day, freq: a.freq, weeks: a.weeks };
         else {
           const o = outlets.find((x) => x.id === a.outletId);
-          next.push({ id: nextPjpId(), salesId, outletId: a.outletId, routeId: o?.routeId, days: a.days, freq: a.freq, weeks: a.weeks, seq: (o?.routeSeq ?? 50) + 0.5, validFrom });
+          next.push({ id: nextPjpId(), salesId, outletId: a.outletId, routeId: o?.routeId, day: a.day, freq: a.freq, weeks: a.weeks, seq: (o?.routeSeq ?? 50) + 0.5, validFrom });
         }
       }
       return next;
@@ -617,7 +602,7 @@ export function ImportDialog({ open, onOpenChange, salesId, entries, validFrom }
         </DialogHeader>
         <div className="space-y-4 p-4">
           <p className="text-xs text-muted-foreground">
-            Template kolom: Kode salesman, Kode outlet, Hari (Senin–Sabtu; F8 / F12 dipisah "&"), Frekuensi (F1 / F2 / F4 / F8 / F12), Minggu (M1–M4), Urutan, Berlaku mulai. Baris divalidasi dulu; hanya baris valid yang diterapkan.
+            Template kolom: Kode salesman, Kode outlet, Hari (satu hari, Senin–Sabtu), Frekuensi (F1 / F2 / F4), Minggu (M1–M4), Urutan, Berlaku mulai. Baris divalidasi dulu; hanya baris valid yang diterapkan.
           </p>
           {!rows ? (
             <div className="flex flex-col items-center gap-3 rounded-md border border-dashed p-8 text-center">

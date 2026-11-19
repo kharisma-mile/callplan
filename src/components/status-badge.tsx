@@ -38,7 +38,3 @@ export function CustomerBadge({ s }: { s: CustomerStatus }) {
 export function ApprovalBadge({ s }: { s: "pending" | "approved" | "rejected" }) {
   return s === "pending" ? <Badge variant="warning">Menunggu</Badge> : s === "approved" ? <Badge variant="success">Disetujui</Badge> : <Badge variant="danger">Ditolak</Badge>;
 }
-export function ClassBadge({ c }: { c: "A" | "B" | "C" }) {
-  const cls = c === "A" ? "bg-[#01496A] text-white" : c === "B" ? "bg-[#6CD1FE] text-[#002638]" : "bg-[#E8E8E8] text-[#4F4F4F]";
-  return <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold ${cls}`}>{c}</span>;
-}

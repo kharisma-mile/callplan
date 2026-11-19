@@ -11,6 +11,7 @@ import { Switch } from "@/components/switch";
 import { useApp } from "@/store/app-store";
 import { BRANCHES, HOLIDAYS } from "@/data/mock";
 import type { Frequency, Settings, Variant } from "@/data/types";
+import { FREQS, FREQ_HINT, FREQ_META } from "@/data/pjp-engine";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -29,15 +30,14 @@ const LABELS: Partial<Record<keyof Settings, string>> = {
   creditApprover: "Penyetuju limit kredit",
   slaHours: "SLA pengingat approval (jam)",
   loa: "Tier LOA diskon",
-  classFreq: "Frekuensi per kelas",
-  belumBeliFreq: "Frekuensi Pelanggan Lama – belum beli",
+  defaultFreq: "Frekuensi default",
   spvEditPjpDirect: "SPV edit PJP langsung",
   pjpApprover: "Penyetuju PJP (sebelum publish)",
   pjpCallTarget: "Target call per hari",
   pjpMaxCalls: "Maksimum call per hari",
   hqCallTarget: "Target call per hari (HQ)",
   hqMaxCalls: "Maksimum call per hari (HQ)",
-  classVisitMinutes: "Durasi kunjungan per kelas",
+  visitMinutes: "Durasi kunjungan default (menit)",
   travelMinutes: "Perjalanan antar outlet (menit)",
   cycleWeeks: "Panjang siklus PJP",
   workDays: "Hari kerja",
@@ -56,7 +56,6 @@ const LABELS: Partial<Record<keyof Settings, string>> = {
   lockAfterPublish: "Kunci PJP setelah publish",
   changeApprover: "Penyetuju perubahan PJP",
   changeRequestSlaHours: "SLA permintaan perubahan",
-  generateBalanceBy: "Generate: dasar penyeimbangan",
   generateKeepRoute: "Generate: pertahankan rute",
   routeStartPoint: "Titik awal rute",
   reminderTime: "Jam pengingat call plan",
@@ -213,13 +212,7 @@ function AddReason({ onAdd }: { onAdd: (r: string) => void }) {
   );
 }
 
-const FREQ: [Frequency, string][] = [
-  ["F12", "F12 · 3×/minggu"],
-  ["F8", "F8 · 2×/minggu"],
-  ["F4", "F4 · tiap minggu"],
-  ["F2", "F2 · 2 minggu sekali"],
-  ["F1", "F1 · 1×/4 minggu"],
-];
+const FREQ: [Frequency, string][] = FREQS.map((f) => [f, FREQ_META[f].label]);
 
 export function SettingsPage() {
   const { settings, setSettings, can, toast, auditLog } = useApp();
@@ -284,7 +277,7 @@ export function SettingsPage() {
         >
           {(d, set, ed) => (
             <>
-              <Row title="Segmen × kelas tanpa assortment" hint="Katalog Mile Field untuk outlet yang segmen × kelasnya belum diatur di Assortment Produk.">
+              <Row title="Segmen tanpa assortment" hint="Katalog Mile Field untuk outlet yang segmennya belum diatur di Assortment Produk.">
                 <Pick value={d.assortmentFallback} disabled={!ed} onChange={(v) => set({ assortmentFallback: v })} options={[["all", "Semua produk aktif"], ["none", "Tidak ada produk"]]} />
               </Row>
               {d.variant === "A" && (
@@ -436,7 +429,7 @@ export function SettingsPage() {
         <SettingsCard
           title="PJP / call plan"
           className="xl:col-span-2"
-          keys={["cycleWeeks", "workDays", "branchWorkDays", "classFreq", "belumBeliFreq", "pjpCallTarget", "pjpMaxCalls", "hqCallTarget", "hqMaxCalls", "classVisitMinutes", "travelMinutes", "generateBalanceBy", "generateKeepRoute", "routeStartPoint"]}
+          keys={["cycleWeeks", "workDays", "branchWorkDays", "defaultFreq", "pjpCallTarget", "pjpMaxCalls", "hqCallTarget", "hqMaxCalls", "visitMinutes", "travelMinutes", "generateKeepRoute", "routeStartPoint"]}
           validate={(d) =>
             d.pjpCallTarget < 1 || d.pjpMaxCalls < d.pjpCallTarget || d.hqMaxCalls < d.hqCallTarget
               ? "Maksimum call per hari harus ≥ target call per hari."
@@ -458,16 +451,12 @@ export function SettingsPage() {
                 <Row title="Override hari kerja per cabang" hint="Contoh: HQ Direct Sales Senin–Jumat. Kosong = ikut default.">
                   <BranchDays value={d.branchWorkDays} fallback={d.workDays} disabled={!ed} onChange={(v) => set({ branchWorkDays: v })} />
                 </Row>
-                {(["A", "B", "C"] as const).map((c) => (
-                  <Row key={c} title={`Frekuensi default kelas ${c}`} hint="Dipakai saat outlet masuk PJP / generate. F8 / F12 dipilih manual per outlet (key account).">
-                    <Pick value={d.classFreq[c]} disabled={!ed} onChange={(v) => set({ classFreq: { ...d.classFreq, [c]: v } })} options={FREQ} />
-                  </Row>
-                ))}
-                <Row title="Pelanggan Lama – belum beli" hint="Frekuensi khusus untuk outlet yang belum pernah beli (AS-16).">
-                  <Pick value={d.belumBeliFreq} disabled={!ed} onChange={(v) => set({ belumBeliFreq: v })} options={FREQ} />
+                <Row title="Frekuensi default" hint="Dipakai saat outlet masuk PJP dan saat generate otomatis. SPV mengubahnya per entri PJP.">
+                  <Pick value={d.defaultFreq} disabled={!ed} onChange={(v) => set({ defaultFreq: v })} options={FREQ} w="w-[180px]" />
                 </Row>
                 <p className="rounded-md bg-muted px-3 py-2 text-[11px] text-muted-foreground">
-                  F1 = 1×/4 minggu (satu minggu) · F2 = 2×/4 minggu (M1&amp;M3 / M2&amp;M4) · F4 = tiap minggu · F8 = 2×/minggu (2 hari, mis. Sen &amp; Kam) · F12 = 3×/minggu (Sen, Rab, Jum).
+                  Bulanan (F1) = 1×/4 minggu · 2 Mingguan (F2) = M1&amp;M3 / M2&amp;M4 · Mingguan (F4) = tiap minggu. Satu hari kunjungan per outlet.
+                  <span className="mt-1 block">{FREQ_HINT}</span>
                 </p>
               </div>
               <div className="space-y-4">
@@ -484,18 +473,11 @@ export function SettingsPage() {
                     <Input type="number" className="w-20 text-right" disabled={!ed} value={d.hqMaxCalls} onChange={(e) => set({ hqMaxCalls: Number(e.target.value) })} />
                   </div>
                 </Row>
-                <Row title="Durasi kunjungan standar A / B / C (menit)" hint="Untuk estimasi durasi hari dan generate berbasis durasi.">
-                  <div className="flex gap-2">
-                    {(["A", "B", "C"] as const).map((c) => (
-                      <Input key={c} type="number" className="w-16 text-right" disabled={!ed} value={d.classVisitMinutes[c]} onChange={(e) => set({ classVisitMinutes: { ...d.classVisitMinutes, [c]: Number(e.target.value) } })} />
-                    ))}
-                  </div>
+                <Row title="Durasi kunjungan default (menit)" hint="Untuk estimasi durasi hari di PJP.">
+                  <Input type="number" className="w-20 text-right" disabled={!ed} value={d.visitMinutes} onChange={(e) => set({ visitMinutes: Number(e.target.value) })} />
                 </Row>
                 <Row title="Perjalanan antar outlet (menit)">
                   <Input type="number" className="w-20 text-right" disabled={!ed} value={d.travelMinutes} onChange={(e) => set({ travelMinutes: Number(e.target.value) })} />
-                </Row>
-                <Row title="Generate: seimbangkan berdasarkan" hint="Jumlah call per hari, atau durasi (kelas A dihitung lebih berat).">
-                  <Pick value={d.generateBalanceBy} disabled={!ed} onChange={(v) => set({ generateBalanceBy: v })} options={[["count", "Jumlah call"], ["duration", "Durasi kunjungan"]]} w="w-[180px]" />
                 </Row>
                 <Row title="Generate: pertahankan rute / beat" hint="Outlet tetap di hari rutenya; hanya F1 / F2 yang boleh digeser ke hari tetangga.">
                   <Switch checked={d.generateKeepRoute} disabled={!ed} onChange={(v) => set({ generateKeepRoute: v })} />

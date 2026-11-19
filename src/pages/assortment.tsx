@@ -14,76 +14,72 @@ import { EmptyState } from "@/components/empty-state";
 import { useApp } from "@/store/app-store";
 import { SEGMENT_LIST } from "@/data/mock";
 import { nowStamp, rupiah } from "@/lib/format";
-import type { AssortmentItem, Outlet, OutletClass } from "@/data/types";
+import type { AssortmentItem, Outlet } from "@/data/types";
 import { cn } from "@/lib/utils";
 
-const CLASSES: OutletClass[] = ["A", "B", "C"];
-
 /**
- * Module 02 — Assortment Produk: products offered per segment (channel) x outlet class, with must-sell flags and
+ * Module 02 — Assortment Produk: products offered per segment (channel), with must-sell flags and
  * per-outlet exceptions. Feeds the Mile Field order catalog (bill items) of each outlet's visit task.
  */
 export function AssortmentPage() {
-  const { assortments, settings } = useApp();
-  const [edit, setEdit] = useState<{ segment: string; cls: OutletClass } | null>(null);
-  const missing = SEGMENT_LIST.length * CLASSES.length - assortments.length;
+  const { assortments, outlets, settings } = useApp();
+  const [edit, setEdit] = useState<string | null>(null);
+  const missing = SEGMENT_LIST.filter((seg) => !assortments.some((a) => a.segment === seg)).length;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Assortment Produk"
-        subtitle="Produk yang ditawarkan per segmen (channel) dan kelas outlet. Menentukan katalog pesanan di Mile Field; produk Wajib (must-sell) otomatis tampil di setiap pesanan."
+        subtitle="Produk yang ditawarkan per segmen (channel) outlet. Menentukan katalog pesanan di Mile Field; produk Wajib (must-sell) otomatis tampil di setiap pesanan."
       />
       <Card>
         <CardContent className="flex flex-wrap items-start gap-2 p-4 text-sm">
           <Info className="mt-0.5 h-4 w-4 text-primary" />
           <div className="flex-1 text-muted-foreground">
-            Katalog outlet = assortment segmen × kelasnya, ditambah / dikurangi pengecualian per outlet. Harga tetap dari price list outlet.
-            {missing > 0 && <> Kombinasi tanpa assortment ({missing}) memakai aturan cadangan: <b>{settings.assortmentFallback === "all" ? "semua produk aktif ditawarkan" : "tidak ada produk"}</b> (ubah di Pengaturan).</>}
+            Katalog outlet = assortment segmennya, ditambah / dikurangi pengecualian per outlet. Harga tetap dari price list outlet.
+            {missing > 0 && <> Segmen tanpa assortment ({missing}) memakai aturan cadangan: <b>{settings.assortmentFallback === "all" ? "semua produk aktif ditawarkan" : "tidak ada produk"}</b> (ubah di Pengaturan).</>}
           </div>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="matrix">
+      <Tabs defaultValue="segment">
         <TabsList>
-          <TabsTrigger value="matrix">Segmen × Kelas</TabsTrigger>
+          <TabsTrigger value="segment">Per Segmen</TabsTrigger>
           <TabsTrigger value="outlet">Per Outlet</TabsTrigger>
         </TabsList>
-        <TabsContent value="matrix" className="mt-4">
+        <TabsContent value="segment" className="mt-4">
           <Card>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Segmen / channel</TableHead>
-                  {CLASSES.map((c) => <TableHead key={c}>Kelas {c}</TableHead>)}
+                  <TableHead>Produk</TableHead>
+                  <TableHead>Wajib</TableHead>
+                  <TableHead>Outlet aktif</TableHead>
+                  <TableHead>Terakhir diubah</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {SEGMENT_LIST.map((seg) => (
-                  <TableRow key={seg}>
-                    <TableCell className="font-medium">{seg}</TableCell>
-                    {CLASSES.map((cls) => {
-                      const a = assortments.find((x) => x.segment === seg && x.cls === cls);
-                      return (
-                        <TableCell key={cls}>
-                          <button onClick={() => setEdit({ segment: seg, cls })} className={cn("w-full rounded-md border px-3 py-2 text-left text-sm transition-colors hover:border-primary", !a && "border-dashed border-[#E9B949] bg-[#FFF8E1]")}>
-                            {a ? (
-                              <>
-                                <span className="block font-medium">{a.items.length} produk</span>
-                                <span className="text-xs text-muted-foreground">{a.items.filter((i) => i.mustSell).length} wajib</span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="flex items-center gap-1 font-medium text-[#6B5000]"><AlertTriangle className="h-3.5 w-3.5" /> Belum diatur</span>
-                                <span className="text-xs text-muted-foreground">Cadangan: {settings.assortmentFallback === "all" ? "semua produk" : "kosong"}</span>
-                              </>
-                            )}
-                          </button>
+                {SEGMENT_LIST.map((seg) => {
+                  const a = assortments.find((x) => x.segment === seg);
+                  return (
+                    <TableRow key={seg} className="cursor-pointer" onClick={() => setEdit(seg)}>
+                      <TableCell className="font-medium">{seg}</TableCell>
+                      {a ? (
+                        <>
+                          <TableCell>{a.items.length} produk</TableCell>
+                          <TableCell>{a.items.filter((i) => i.mustSell).length}</TableCell>
+                        </>
+                      ) : (
+                        <TableCell colSpan={2}>
+                          <span className="flex items-center gap-1 text-sm font-medium text-[#6B5000]"><AlertTriangle className="h-3.5 w-3.5" /> Belum diatur · cadangan: {settings.assortmentFallback === "all" ? "semua produk" : "kosong"}</span>
                         </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
+                      )}
+                      <TableCell>{outlets.filter((o) => o.active && o.segment === seg).length}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{a?.updatedAt ? `${a.updatedBy} · ${a.updatedAt}` : "—"}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </Card>
@@ -93,32 +89,32 @@ export function AssortmentPage() {
         </TabsContent>
       </Tabs>
 
-      {edit && <EditDialog segment={edit.segment} cls={edit.cls} onClose={() => setEdit(null)} />}
+      {edit && <EditDialog segment={edit} onClose={() => setEdit(null)} />}
     </div>
   );
 }
 
-function EditDialog({ segment, cls, onClose }: { segment: string; cls: OutletClass; onClose: () => void }) {
+function EditDialog({ segment, onClose }: { segment: string; onClose: () => void }) {
   const { assortments, setAssortments, products, can, toast, addAudit, user, outlets } = useApp();
-  const current = assortments.find((a) => a.segment === segment && a.cls === cls);
+  const current = assortments.find((a) => a.segment === segment);
   const [items, setItems] = useState<AssortmentItem[]>(current?.items ?? []);
   const canEdit = current ? can("update_assortment") : can("create_assortment");
-  const affected = outlets.filter((o) => o.active && o.segment === segment && o.cls === cls).length;
+  const affected = outlets.filter((o) => o.active && o.segment === segment).length;
   const has = (pid: string) => items.find((i) => i.productId === pid);
   const toggle = (pid: string, on: boolean) => setItems((l) => (on ? [...l, { productId: pid, mustSell: false }] : l.filter((i) => i.productId !== pid)));
   const save = () => {
     setAssortments((l) => {
-      const rec = { id: current?.id ?? `AS-${Date.now()}`, segment, cls, items, updatedBy: user?.name, updatedAt: nowStamp() };
+      const rec = { id: current?.id ?? `AS-${Date.now()}`, segment, items, updatedBy: user?.name, updatedAt: nowStamp() };
       return current ? l.map((a) => (a.id === current.id ? rec : a)) : [...l, rec];
     });
-    addAudit({ module: "Assortment", action: current ? "Assortment diubah" : "Assortment dibuat", target: `${segment} · Kelas ${cls}`, detail: `${items.length} produk, ${items.filter((i) => i.mustSell).length} wajib` });
+    addAudit({ module: "Assortment", action: current ? "Assortment diubah" : "Assortment dibuat", target: segment, detail: `${items.length} produk, ${items.filter((i) => i.mustSell).length} wajib` });
     toast({ tone: "success", title: "Assortment disimpan", desc: `${affected} outlet terdampak. Katalog Mile Field diperbarui pada sinkronisasi berikutnya.` });
     onClose();
   };
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-3xl gap-0 p-0">
-        <DialogHeader><DialogTitle>Assortment · {segment} · Kelas {cls}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Assortment · {segment}</DialogTitle></DialogHeader>
         <div className="flex items-center gap-2 px-4 pt-3 text-sm text-muted-foreground">
           <Badge variant="neutral">{affected} outlet</Badge> {items.length} produk ditawarkan · {items.filter((i) => i.mustSell).length} wajib
           {current?.updatedAt && <span className="ml-auto text-xs">Terakhir diubah {current.updatedBy} · {current.updatedAt}</span>}
@@ -191,7 +187,7 @@ function PerOutlet() {
           {candidates.map((o) => (
             <button key={o.id} onClick={() => setOutletId(o.id)} className={cn("w-full rounded-md px-3 py-2 text-left text-sm", outletId === o.id ? "bg-accent text-accent-foreground" : "hover:bg-muted")}>
               <span className="block font-medium">{o.name}</span>
-              <span className="text-xs text-muted-foreground">{o.segment} · Kelas {o.cls} · {o.priceGroup}</span>
+              <span className="text-xs text-muted-foreground">{o.segment} · {o.priceGroup}</span>
             </button>
           ))}
         </CardContent>
@@ -208,9 +204,9 @@ function PerOutlet() {
               <CardContent className="space-y-2 p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-base font-semibold">{outlet.name}</span>
-                  <Badge variant="neutral">{outlet.segment} · Kelas {outlet.cls}</Badge>
+                  <Badge variant="neutral">{outlet.segment}</Badge>
                   <Badge variant="info">Price list {outlet.priceGroup}</Badge>
-                  {eff.fallback && <Badge variant="warning">Segmen × kelas belum diatur (aturan cadangan)</Badge>}
+                  {eff.fallback && <Badge variant="warning">Segmen belum diatur (aturan cadangan)</Badge>}
                 </div>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground"><Smartphone className="h-3.5 w-3.5" /> Katalog ini menjadi daftar item Bill (Pesanan) di task kunjungan Mile Field; produk wajib sudah terisi qty 0.</p>
               </CardContent>
@@ -252,13 +248,13 @@ function PerOutlet() {
                   })}
                 </TableBody>
               </Table>
-              {eff.items.length === 0 && <EmptyState title="Tidak ada produk" desc="Atur assortment segmen × kelas atau tambahkan produk untuk outlet ini." />}
+              {eff.items.length === 0 && <EmptyState title="Tidak ada produk" desc="Atur assortment segmen atau tambahkan produk untuk outlet ini." />}
               <CardContent className="space-y-3 border-t p-4">
                 {!canEdit && (
                   <p className="flex items-center gap-1 text-xs text-muted-foreground"><Info className="h-3.5 w-3.5" /> Mode lihat. Menambah / mengecualikan produk perlu permission <code>update_assortment</code> (default: Admin, Commercial Director).</p>
                 )}
                 {canEdit && notOffered.length === 0 && (
-                  <p className="flex items-center gap-1 text-xs text-[#6B5000]"><AlertTriangle className="h-3.5 w-3.5" /> Semua produk aktif sudah ada di katalog outlet ini{eff.fallback ? " karena segmen × kelasnya belum diatur (aturan cadangan: semua produk)" : ""}. {eff.fallback ? "Atur assortment segmen × kelas dulu, lalu tambahkan produk khusus bila perlu." : ""}</p>
+                  <p className="flex items-center gap-1 text-xs text-[#6B5000]"><AlertTriangle className="h-3.5 w-3.5" /> Semua produk aktif sudah ada di katalog outlet ini{eff.fallback ? " karena segmennya belum diatur (aturan cadangan: semua produk)" : ""}. {eff.fallback ? "Atur assortment segmen dulu, lalu tambahkan produk khusus bila perlu." : ""}</p>
                 )}
                 {canEdit && notOffered.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
